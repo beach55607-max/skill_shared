@@ -17,7 +17,7 @@ Community-safe Codex skill for multi-repo engineering work.
 - 先判斷這次變更會不會碰到 durable state、rollback、observability
 - 最後才決定要不要改，以及該跑多深的 validation
 
-你可以把它理解成一個比較有資深工程師味道的起手式。不是一上來就寫 code，而是先把邊界看清楚。
+你可以把它理解成一個先釐清方向與邊界的起手式。不是一上來就寫 code，而是先把方向、邊界和風險看清楚。
 
 ### 適合誰
 
@@ -145,7 +145,7 @@ I need to review a change that touches a frontend app, a backend route, and exte
 
 但不會帶入任何內部 repo 名稱、私有驗證指令、公司流程或內部架構細節。
 
-如果你想把 Codex 從「會寫程式」提升到「比較像資深工程師在帶方向」，這份 skill 就是往那個方向設計的。
+如果你想讓 Codex 在動手前先把方向、邊界和風險想清楚，這份 skill 就是往這個用途設計的。
 
 ## English
 
@@ -157,7 +157,7 @@ The goal is simple: help Codex get the direction right before it starts changing
 
 In multi-repo systems, frontend/backend splits, admin tools, automation flows, and browser extensions, the most expensive mistakes usually are not syntax mistakes. The real failures come from changing the wrong repo, assuming the wrong owner, missing a contract boundary, or validating the wrong thing.
 
-This skill teaches a more senior-engineer style starting point:
+This skill encourages a more deliberate engineering starting point:
 
 - identify the true owner repo or runtime first
 - inspect contract and security surfaces before editing
@@ -299,4 +299,4 @@ And it intentionally avoids:
 - private validation commands
 - organization-specific processes
 
-If you want Codex to behave less like a fast code generator and more like a careful senior engineer doing preflight first, this skill is built for that direction.
+If you want Codex to think through direction, boundaries, and risk before making changes, this skill is built for that purpose.
