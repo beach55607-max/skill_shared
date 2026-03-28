@@ -12,6 +12,11 @@ This runtime usually owns:
 - shared backend contracts
 - privileged write behavior
 
+## Example Scenario
+
+Example: a frontend wants to add a new request field or change a field from string to array.
+Even if the first visible edit is in a mapper or API client, this adapter becomes primary when the backend route owns validation, defaults, persistence, or compatibility rules.
+
 ## Protected Surfaces
 
 Treat these as contract-sensitive:
@@ -27,6 +32,8 @@ Treat these as contract-sensitive:
 - start with route or handler-focused tests
 - run repo-standard lint and test
 - run the stronger gate or build path when auth, persistence, or shared contracts change
+
+Do not stop at caller-side validation when the backend enforces schema, auth, or storage behavior.
 
 ## Stop Conditions
 

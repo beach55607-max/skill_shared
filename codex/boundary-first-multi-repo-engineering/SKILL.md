@@ -40,6 +40,8 @@ Use [owner-selection.md](./references/owner-selection.md) first, then pick one a
 - browser extension: [browser-extension.md](./references/adapters/browser-extension.md)
 
 If the task spans multiple systems, read [cross-boundary-contracts.md](./references/cross-boundary-contracts.md) after owner selection.
+If no adapter matches cleanly, apply the preflight protocol directly, state the assumed system type, and prefer the system that owns validation, persistence, auth, or runtime policy.
+Treat repeated no-match cases as a signal to create a new adapter later, not as a reason to skip boundary analysis now.
 
 ## Core Non-Negotiables
 

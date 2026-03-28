@@ -18,6 +18,8 @@ Follow this order:
 
 If local rules conflict with this skill, follow the local rules and explain the conflict.
 
+When two touched systems have local rules that conflict with each other, prefer the system-of-record's rules for shared contract behavior, keep the consumer compatible where possible, and escalate breaking tradeoffs to the user.
+
 ## Boundary-First Principle
 
 Before editing, identify:
