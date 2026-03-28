@@ -7,7 +7,11 @@ description: Boundary-first workflow for multi-repo coding, review, debugging, a
 
 ## Overview
 
-Use this skill for engineering tasks where the request may touch more than one repo, service, runtime, or contract surface.
+**Use when:** a task may touch more than one repo, service, runtime, or contract surface.
+**Prevents:** changing the wrong repo, missing contract boundaries, skipping rollback design, validating the wrong side.
+**Requires:** reading source and local rules before assuming implementation details.
+**Produces:** explicit owner/consumer identification, risk-matched validation, reviewable close-out with mechanical evidence.
+
 Start by identifying the owner boundary, then map contract, security, state, observability, and validation requirements before making changes.
 
 Read [constitution.md](./references/constitution.md) first.

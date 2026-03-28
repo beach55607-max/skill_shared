@@ -1,5 +1,10 @@
 # Boundary-First Multi-Repo Engineering
 
+**Use when:** a task may touch more than one repo, service, runtime, or contract surface.
+**Prevents:** changing the wrong repo, missing contract boundaries, skipping rollback design, validating the wrong side.
+**Requires:** reading source and local rules before assuming implementation details.
+**Produces:** explicit owner/consumer identification, risk-matched validation, reviewable close-out with mechanical evidence.
+
 ## Authority Order
 
 1. Explicit user request

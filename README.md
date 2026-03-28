@@ -9,6 +9,37 @@ This repository packages two editions:
 - **Codex edition** — `codex/boundary-first-multi-repo-engineering/`
 - **Claude Code edition** — `claude-code/boundary-first-multi-repo-engineering/`
 
+## Quick Start
+
+**Claude Code:** Copy `claude-code/.../CLAUDE.md` to your project root, copy `references/` to `.claude/boundary-first/`. Done — it auto-loads every conversation.
+
+**Codex:** Copy `codex/.../` to `~/.codex/skills/boundary-first-multi-repo-engineering/`, restart Codex.
+
+**When to use:** Any task that may cross a repo, service, or contract boundary.
+**When NOT to use:** Single-file scripts, typo fixes, formatting — anything with zero protected surface. The workflow auto-classifies these as D0 and requires no ceremony.
+
+## Capability Map
+
+```text
+Decision Layer     D0-D3 severity classification
+                   Implementation plan template
+                   Maker-checker for D2/D3
+                   ─────────────────────────────────
+Boundary Layer     Owner / consumer identification
+                   Cross-boundary contract model
+                   Conflict resolution
+                   Adapter selection (5 types + fallback)
+                   ─────────────────────────────────
+Verification Layer Mechanical verification (gates, guards, CI, GT, contract tests)
+                   6-level verification depth ladder
+                   One-side-only = partial, not pass
+                   ─────────────────────────────────
+Delivery Layer     Structured close-out template
+                   Rollback stance mandatory for durable changes
+                   File safety guardrail
+                   Residual risk disclosure
+```
+
 ---
 
 ## 中文說明
