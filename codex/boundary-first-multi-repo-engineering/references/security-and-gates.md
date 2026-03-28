@@ -39,7 +39,9 @@ If a shared contract changed and only one side was validated, report the result 
 
 Before closing a task, state:
 
+- the decision level when the task is more than local implementation
 - which auth, permission, or contract surfaces were touched
 - which strong validation path ran
 - what could not be validated locally
 - what rollback or blast-radius stance applies if durable state was affected
+- what maker-checker evidence applies for D2/D3 work

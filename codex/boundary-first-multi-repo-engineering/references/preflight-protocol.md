@@ -2,6 +2,19 @@
 
 Run this protocol internally before substantial coding, debugging, or automation work.
 
+## 0. Decision Gate
+
+Before the numbered checks below, classify the task as D0, D1, D2, or D3.
+
+Use:
+
+- `decision-gate.md`
+
+If the task is D1, D2, or D3, state the minimum implementation plan before editing.
+Use:
+
+- `implementation-plan-template.md`
+
 ## 1. Change Class
 
 Classify the task into one or more:

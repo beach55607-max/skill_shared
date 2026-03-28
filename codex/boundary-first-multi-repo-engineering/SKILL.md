@@ -14,7 +14,19 @@ Read [constitution.md](./references/constitution.md) first.
 
 ## Mandatory Preflight
 
-Before planning or editing, complete this preflight internally:
+Before planning or editing:
+
+1. Run the decision gate.
+2. If the task is D1, D2, or D3, state the minimum implementation plan before coding.
+3. Then complete this preflight internally.
+
+Use:
+
+- [decision-gate.md](./references/decision-gate.md)
+- [implementation-plan-template.md](./references/implementation-plan-template.md)
+- [preflight-protocol.md](./references/preflight-protocol.md)
+
+The preflight itself remains:
 
 1. Classify the change.
 2. Identify the owner repo or runtime and the consumer.
@@ -25,9 +37,7 @@ Before planning or editing, complete this preflight internally:
 7. Map the required validation depth.
 8. Pause on stop conditions that need escalation.
 
-Read [preflight-protocol.md](./references/preflight-protocol.md) for the detailed sequence.
-
-For high-risk changes such as auth, schema, destructive writes, permissions, or cross-boundary contract work, document the current assumption, owner, rollback stance, and validation plan before editing.
+For high-risk changes such as auth, schema, destructive writes, permissions, or cross-boundary contract work, do not skip the decision gate or plan step just because the user asked for code quickly.
 
 ## Adapter Selection
 
@@ -42,6 +52,7 @@ Use [owner-selection.md](./references/owner-selection.md) first, then pick one a
 - browser extension: [browser-extension.md](./references/adapters/browser-extension.md)
 
 If the task spans multiple systems, read [cross-boundary-contracts.md](./references/cross-boundary-contracts.md) after owner selection.
+If multiple systems have conflicting local rules, rollout constraints, or validation expectations, read [conflict-resolution.md](./references/conflict-resolution.md).
 If no adapter matches cleanly, apply the preflight protocol directly, state the assumed system type, and prefer the system that owns validation, persistence, auth, or runtime policy.
 Treat repeated no-match cases as a signal to create a new adapter later, not as a reason to skip boundary analysis now.
 
@@ -56,6 +67,8 @@ Treat repeated no-match cases as a signal to create a new adapter later, not as 
 - Prefer the strongest repo-defined verification path over shallow spot checks.
 - Do not pretend caller-side validation is enough when a producer or shared contract also changes.
 - Treat durable state changes as incomplete until rollback, fallback, or blast-radius stance is explicit.
+- If a shared contract changes and only one side was validated, the task is partial or blocked, not passed.
+- D2 and D3 work require maker-checker evidence or explicit user confirmation before close-out.
 
 For deeper guidance, read:
 
@@ -69,19 +82,23 @@ Before finishing, make the outcome reviewable.
 
 State clearly:
 
+- decision level
 - owner repo or runtime and consumer surface
 - contract, auth, schema, storage, or permission surfaces touched
 - validation run, skipped, or blocked
 - rollback or compatibility risks that remain
+- maker-checker evidence when the task is D2 or D3
 
 Use this template when helpful:
 
+- Decision level:
 - Owner:
 - Consumer:
 - Touched surfaces:
 - Validation run:
 - Validation skipped or blocked:
 - Rollback or compatibility risk:
+- Maker-checker evidence:
 - Residual unknowns:
 
 If the task touches a stop-condition surface and executable verification is unavailable, call that out explicitly instead of treating the skill alone as sufficient evidence.
