@@ -72,6 +72,7 @@ Treat repeated no-match cases as a signal to create a new adapter later, not as 
 
 For deeper guidance, read:
 
+- [mechanical-verification.md](./references/mechanical-verification.md)
 - [security-and-gates.md](./references/security-and-gates.md)
 - [architecture-and-observability.md](./references/architecture-and-observability.md)
 - [validation-matrix.md](./references/validation-matrix.md)
