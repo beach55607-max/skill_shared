@@ -34,7 +34,7 @@ Before planning or editing, complete this internally:
 4. **Security**: Does this touch auth, signatures, secrets, durable writes, permissions, or host access? If yes, treat as high risk.
 5. **State**: Does this change durable state (database, key-value, spreadsheets, browser storage, config)? If yes, identify rollback path before coding. **Rollback is mandatory for durable changes — no rollback stance means no close-out.**
 6. **Observability**: What belongs in normal logs vs debug-only? How are correlation IDs preserved? Do not add noisy diagnostics without a toggle strategy.
-7. **Validation**: Narrowest direct test > repo-standard lint/test > strong gate or build > cross-system validation. If the repo has a real gate, prefer it over ad-hoc spot checks.
+7. **Validation**: Narrowest direct test > repo-standard lint/test > strong gate or build > cross-system validation. If the repo has a real gate, prefer it over ad-hoc spot checks. Read `references/mechanical-verification.md` for the depth ladder and gate guidance.
 8. **Stop conditions**: Pause and escalate on auth/signature changes, destructive write flows, schema migrations, permission changes, new host access, file deletes/moves/broad overwrites without explicit request, or high-risk writes without executable verification.
 
 ## Step 2: Adapter Selection
@@ -88,6 +88,7 @@ If a stop-condition surface was touched and executable verification is unavailab
 - `references/constitution.md` -- authority order and protected surfaces (SSOT)
 - `references/owner-selection.md` -- decision tree for identifying the owner
 - `references/cross-boundary-contracts.md` -- producer/consumer model with examples
+- `references/mechanical-verification.md` -- gates, guards, GT, contract tests, and verification depth ladder
 - `references/security-and-gates.md` -- security rules and validation depth
 - `references/architecture-and-observability.md` -- boundary architecture and logging
 - `references/validation-matrix.md` -- validation commands by adapter type
