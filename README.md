@@ -1,22 +1,54 @@
-# Boundary-First Multi-Repo Engineering
+# AI Engineering Skills
 
-Community-safe workflow packages for Codex and Claude Code.
+Community-safe workflow and planning skills for Codex and Claude Code.
+
+This repository contains two skill packs:
+
+## Skill Packs
+
+### 1. Boundary-First Multi-Repo Engineering
 
 A boundary-first engineering workflow for multi-repo, multi-runtime, and contract-sensitive tasks.
-
-This repository packages two editions:
 
 - **Codex edition** — `codex/boundary-first-multi-repo-engineering/`
 - **Claude Code edition** — `claude-code/boundary-first-multi-repo-engineering/`
 
+**When to use:** Any task that may cross a repo, service, or contract boundary.
+**When NOT to use:** Single-file scripts, typo fixes, formatting — anything with zero protected surface.
+
+### 2. Executable Spec Planning (NEW)
+
+A planning workflow that turns fuzzy requirements into executable specifications — specs that an AI agent can implement without ambiguity, and that can be verified mechanically after implementation.
+
+- **Agent-agnostic** — `executable-spec-planning/` (works with both Claude Code and Codex)
+
+**When to use:** New features, migrations, refactors, or any task handed to an AI agent for execution.
+**When NOT to use:** Single-line fixes, doc edits, infra console operations.
+
+**Key capabilities:**
+
+- Architecture Fit Check before writing any spec (prevents building the right thing with the wrong architecture)
+- Decision Lock Table with zero-TBD gate
+- CONTRACT triple (INPUT + OUTPUT + APPROVAL) for information output tasks
+- Scope Negative List to prevent AI scope creep
+- Maker-Checker separation with trust calibration
+- 25-check completeness guard (Layer A manual + Layer B executable scripts)
+- Risk escalation triggers (permission/DB mutations/fan-in/routing/prior incidents)
+- Governance audit (7 items) in close-out reports
+
 ## Quick Start
+
+### Boundary-First Engineering
 
 **Claude Code:** Copy `claude-code/.../CLAUDE.md` to your project root, copy `references/` to `.claude/boundary-first/`. Done — it auto-loads every conversation.
 
 **Codex:** Copy `codex/.../` to `~/.codex/skills/boundary-first-multi-repo-engineering/`, restart Codex.
 
-**When to use:** Any task that may cross a repo, service, or contract boundary.
-**When NOT to use:** Single-file scripts, typo fixes, formatting — anything with zero protected surface. The workflow auto-classifies these as D0 and requires no ceremony.
+### Executable Spec Planning
+
+**Claude Code:** Copy `executable-spec-planning/` to `.claude/skills/executable-spec-planning/`, or paste `SKILL.md` content into your project's `CLAUDE.md`.
+
+**Codex:** Copy `executable-spec-planning/` to `~/.codex/skills/executable-spec-planning/`, restart Codex.
 
 ## Capability Map
 
