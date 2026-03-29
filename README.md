@@ -1,24 +1,201 @@
 # AI Engineering Skills
 
-Community-safe workflow, planning, and review skills for AI coding agents (Claude Code, Codex, ChatGPT, and beyond).
+給 AI coding agent 用的工程治理 skill（Claude Code、Codex、ChatGPT 皆適用）。
 
-This repository contains three skill packs that cover the full AI-assisted development lifecycle:
+三套 skill 覆蓋 AI 輔助開發的完整生命週期：
 
 ```text
-  Decide          →        Plan          →       Build        →       Verify
+  決定            →        規劃          →       施工         →       驗證
  ┌──────────────┐   ┌──────────────────┐   ┌──────────────┐   ┌──────────────────┐
- │ Boundary-     │   │ Executable Spec  │   │ (your AI     │   │ Adversarial Code │
+ │ Boundary-     │   │ Executable Spec  │   │ (你的 AI     │   │ Adversarial Code │
  │ First         │──>│ Planning         │──>│  agent)      │──>│ Review           │
  │ Engineering   │   │                  │   │              │   │                  │
  └──────────────┘   └──────────────────┘   └──────────────┘   └──────────────────┘
-  Who owns this?     What exactly to build?  Code changes       Did the AI get it right?
-  What can break?    What are the gates?                        Prove it with evidence.
-  How to roll back?  What is NOT in scope?
+  誰負責？           要做什麼？               改 code            AI 做對了嗎？
+  什麼會壞？         驗收標準是什麼？                            用證據證明。
+  怎麼回滾？         不做什麼？
 ```
 
 ---
 
-## When to Use Which Skill — Decision Tree
+## 什麼時候用哪一套 — 決策樹
+
+```text
+你有一個任務
+│
+├─ 是瑣碎修改？（typo、comment、排版）
+│  └─ 直接做，不需要 skill。(D0)
+│
+├─ 會跨 repo、跨服務、或改到 contract？
+│  └─ 是 → 先用 Boundary-First
+│         確認 owner、consumer、contract 風險、rollback 策略。
+│         再決定是否也需要 Spec Planning 和/或 Adversarial Review。
+│
+├─ 需要先寫 spec 再施工？
+│  （新功能、遷移、重構、多 phase 工作）
+│  └─ 是 → 用 Executable Spec Planning
+│         寫出有 Decision Lock、驗收標準、scope 邊界的 spec。
+│         如果跨 repo，可搭配 Boundary-First。
+│
+├─ 在審查 AI 產出的 code、PR、或 spec？
+│  └─ 是 → 用 Adversarial Code Review
+│         選模式（Code / Spec / Release Gate）
+│         和強度（L1 Fast / L2 Standard / L3 Adversarial）。
+│
+└─ 以上都有？
+   └─ 組合使用。典型全生命週期：
+      Boundary-First (決定) → Spec Planning (規劃) → AI 施工 → Adversarial Review (驗證)
+```
+
+### 常見組合
+
+| 場景 | 使用哪幾套 | 為什麼 |
+|------|-----------|--------|
+| 小 bug fix，單 repo | Adversarial Review (L1 Fast) | 只需要驗證修復正確 |
+| 新功能，單 repo | Spec Planning → Adversarial Review (L2) | 先規劃再驗證 |
+| Schema 遷移，跨 repo | Boundary-First → Spec Planning → Adversarial Review (L3) | 完整生命週期 |
+| 審查別人的 PR | Adversarial Review (L2 Code Mode) | 用證據驗證 |
+| 審查設計文件 | Adversarial Review (L2 Spec Mode) | 檢查完整性和一致性 |
+| 部署前驗證 | Adversarial Review (L3 Release Gate) | 完整 execution-layer audit |
+
+---
+
+## End-to-End 示例：完整生命週期
+
+> 場景：在 API 加入批次庫存查詢。涉及資料庫 schema、cache 層、和一個前端 consumer。
+
+### Phase 1: 決定（Boundary-First Engineering）
+
+```text
+Prompt: "Use boundary-first to preflight a batch inventory query feature
+         that adds a new API endpoint and changes the DB schema."
+
+產出：
+  - Owner: backend-service repo, data layer
+  - Consumer: frontend-app repo（呼叫新 endpoint）
+  - 風險: D2（跨 repo contract + schema 變更）
+  - Protected surfaces: DB schema, API response shape, cache keys
+  - Rollback: schema migration 必須向後相容
+  - 行動: 需要先寫 implementation spec
+```
+
+### Phase 2: 規劃（Executable Spec Planning）
+
+```text
+Prompt: "Write an implementation spec for the batch inventory query.
+         Include Decision Lock, acceptance criteria, and rollback per phase."
+
+產出（節錄）：
+  - Decision Lock Table:
+    | 決策               | 選擇                 | 負責人 | 理由                |
+    |--------------------|---------------------|--------|---------------------|
+    | 查詢策略            | Batch + Promise.all | PM     | 從 N*4 降到 U+3 次  |
+    | Cache invalidation | Versioned key prefix | PM     | Edge cache TTL 問題 |
+
+  - 驗收標準：
+    ✅ "7 items, 7 unique groups → 查詢次數 = 10 (U+3)"
+    ✅ "單筆 combo 失敗不影響整批"
+    ❌ "效能改善"（拒絕：不可量測）
+
+  - Scope Negative List：
+    - 不重構現有單筆查詢路徑
+    - 不改 cache TTL 值
+```
+
+### Phase 3: 施工（你的 AI Agent）
+
+AI agent 根據 spec 實作。Code 改動送成 PR。
+
+### Phase 4: 驗證（Adversarial Code Review）
+
+```text
+Prompt: "Review this PR using adversarial-code-review.
+         Mode: Code, Intensity: L3 Adversarial."
+
+產出（節錄）：
+  F-01 (🟡): Spec 宣稱 "≤4 queries" 但 code 實際 U+3。
+    7 個 unique groups → 10 次查詢，不是 4 次。
+    判定：行為正確，文件不精確。不 block。
+
+  F-02 (✅): Fair-share 計算鏈路追蹤驗證完成。
+    手算測試場景數字與預期一致。
+
+  F-03 (🟡): Share-group 查詢有 N+1 pattern。
+    7 unique groups → 7 次循序 DB 查詢。
+    判定：目前規模可接受，標記為未來優化項。
+
+  Execution Evidence:
+    | # | 指令                              | 結果             |
+    |---|----------------------------------|-----------------|
+    | 1 | npx vitest run combo.test.ts     | 12/12 PASS      |
+    | 2 | grep -rn 'ON CONFLICT' src/      | 3 matches, all parameterized |
+
+  Overall: 🟡 CONDITIONAL-GO（修正文件，接受 N+1）
+```
+
+### Close-Out
+
+```text
+  Decision level: D2
+  Owner: backend-service, data layer
+  Consumer: frontend-app
+  Surfaces touched: DB schema, API response shape, cache keys
+  Validation: gate:pr PASS on backend, build PASS on frontend
+  Rollback: schema migration is additive（向後相容）
+```
+
+---
+
+## 這個 repo 有三套 skill
+
+**Skill 1: Boundary-First Engineering** — 讓 AI agent 在改 code 之前，先把 owner、boundary、contract、rollback 想清楚。適合多 repo、跨服務、跨 runtime 的工程任務。
+
+**Skill 2: Executable Spec Planning** — 讓 AI 從模糊需求走到可執行規格書（spec），確保每個影響施工的決策都有主人、有紀錄、有驗證方式。適合新功能、遷移、重構、任何要交給 AI agent 執行的任務。
+
+**Skill 3: Adversarial Code Review** — 讓 AI reviewer 用證偽法審查 code 和規格書，而不是表面確認「看起來對」。從 30+ 個 AI reviewer 真實判斷錯誤的案例中提煉出方法論。包含 13 個真實攔截案例的 before/after 對照。
+
+### 為什麼需要這三套
+
+因為 AI coding 最昂貴的失敗，不是語法錯誤：
+
+- **Boundary-First 防的是**：owner 判錯、contract 判錯、rollback 沒想、validation 驗錯地方
+- **Spec Planning 防的是**：spec 假完整（看起來齊全但驗收條件模糊）、AI 超出 scope 自主決策、架構方向選錯但技術 gate 全過
+- **Adversarial Review 防的是**：AI reviewer 橡皮圖章（「看起來對」就 PASS）、mock PASS ≠ production PASS、log 存在 ≠ 處理存在、平台特性假設不驗證
+
+這三套可以獨立使用，也可以組合：先用 Boundary-First 判斷 owner 和風險，用 Spec Planning 寫出可執行的規格書，最後用 Adversarial Review 驗證 AI 的實作。
+
+### 適合誰
+
+- 在多 repo 專案工作的工程師
+- 想讓 AI agent 不要一上來就改錯地方的人
+- 需要在寫 code 之前先把 spec 想清楚的人
+- 想讓 AI review 不只是蓋橡皮圖章的人
+- 已經有經驗，但想把 preflight、spec、validation 思路標準化的團隊
+
+### 這不是什麼
+
+- 不是初學者 coding 教學
+- 不是框架或 runtime
+- 不是萬用 prompt pack
+- 不是 repo-local 規則、tests、CI 的替代品
+
+如果你的任務是單檔小腳本、沒有 protected surface、不碰 contract boundary，workflow 會自動分類為 D0，不需要走完整儀式。
+
+### 公開版的設計原則
+
+這個 repository 刻意保留方法論，不帶入任何內部拓樸。
+
+它會教你怎麼想：owner boundary、contract risk、validation depth、rollback stance、decision lock、architecture fit、scope negative list、mechanical verification、falsification-first review。
+
+但不會帶入任何內部 repo 名稱、私有驗證指令、公司流程或內部架構細節。
+
+---
+
+## English Summary
+
+> Decision tree, common combinations, and end-to-end example are in the Chinese section above. The diagrams and code blocks are language-neutral.
+
+### When to Use Which Skill
 
 ```text
 You have a task
@@ -57,92 +234,6 @@ You have a task
 | Reviewing someone else's PR | Adversarial Review (L2 Code Mode) | Verify with evidence |
 | Reviewing a design doc | Adversarial Review (L2 Spec Mode) | Check completeness and consistency |
 | Pre-deploy verification | Adversarial Review (L3 Release Gate) | Full execution-layer audit |
-
----
-
-## End-to-End Example: Full Lifecycle
-
-> Scenario: Add batch inventory query to an API. Touches database schema, cache layer, and a frontend consumer.
-
-### Phase 1: Decide (Boundary-First Engineering)
-
-```text
-Prompt: "Use boundary-first to preflight a batch inventory query feature
-         that adds a new API endpoint and changes the D1 schema."
-
-Output:
-  - Owner: backend-service repo, data layer
-  - Consumer: frontend-app repo (calls the new endpoint)
-  - Risk: D2 (cross-repo contract + schema change)
-  - Protected surfaces: D1 schema, API response shape, cache keys
-  - Rollback: schema migration must be backwards-compatible
-  - Action: need implementation spec before coding
-```
-
-### Phase 2: Plan (Executable Spec Planning)
-
-```text
-Prompt: "Write an implementation spec for the batch inventory query.
-         Include Decision Lock, acceptance criteria, and rollback per phase."
-
-Output (excerpt):
-  - Decision Lock Table:
-    | Decision           | Choice              | Owner | Rationale          |
-    |--------------------|---------------------|-------|--------------------|
-    | Query strategy      | Batch with Promise.all | PM  | Reduces N*4 to U+3 |
-    | Cache invalidation  | Versioned key prefix   | PM  | Edge cache TTL issue |
-
-  - Acceptance Criteria:
-    ✅ "7 items, 7 unique groups → query count = 10 (U+3)"
-    ✅ "Single combo failure does not crash batch"
-    ❌ "Performance improves" (rejected: not measurable)
-
-  - Scope Negative List:
-    - Do NOT refactor existing single-query path
-    - Do NOT change cache TTL values
-```
-
-### Phase 3: Build (Your AI Agent)
-
-AI agent implements the spec. Code changes land as a PR.
-
-### Phase 4: Verify (Adversarial Code Review)
-
-```text
-Prompt: "Review this PR using adversarial-code-review.
-         Mode: Code, Intensity: L3 Adversarial."
-
-Output (excerpt):
-  F-01 (🟡): Spec claims "≤4 queries" but code does U+3.
-    With 7 unique groups → 10 queries, not 4.
-    Verdict: behavior correct, doc inaccurate. Non-blocking.
-
-  F-02 (✅): Fair-share calculation chain traced and verified.
-    Manual arithmetic for test scenario matches expected output.
-
-  F-03 (🔴): Share-group query has N+1 pattern without batch.
-    7 unique groups → 7 sequential D1 queries.
-    Verdict: acceptable at current scale, flag for future optimization.
-
-  Execution Evidence:
-    | # | Command                          | Result          |
-    |---|----------------------------------|-----------------|
-    | 1 | npx vitest run combo.test.ts     | 12/12 PASS      |
-    | 2 | grep -rn 'ON CONFLICT' src/      | 3 matches, all parameterized |
-
-  Overall: 🟡 CONDITIONAL-GO (fix doc, accept N+1 for now)
-```
-
-### Close-Out
-
-```text
-  Decision level: D2
-  Owner: backend-service, data layer
-  Consumer: frontend-app
-  Surfaces touched: D1 schema, API response shape, cache keys
-  Validation: gate:pr PASS on backend, build PASS on frontend
-  Rollback: schema migration is additive (backwards-compatible)
-```
 
 ---
 
