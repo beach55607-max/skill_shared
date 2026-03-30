@@ -43,7 +43,7 @@ description: "Adversarial code review skill for LG LineBot ecosystem. Use whenev
 
 ## §0 校準案例（Calibration Cases）
 
-以下 9 個案例都是 **AI reviewer（含 Claude / Codex）曾經判斷錯誤** 的真實事件。審查前先讀這些案例校準直覺。
+以下 10 個案例都是 **AI reviewer（含 Claude / Codex）曾經判斷錯誤** 的真實事件。審查前先讀這些案例校準直覺。
 
 ### Case 1: discontinued_status 大小寫（JOIN Key Mismatch）
 
@@ -104,6 +104,14 @@ description: "Adversarial code review skill for LG LineBot ecosystem. Use whenev
 - **AI reviewer 說**：「用 PowerShell `-replace` 批次修改中文檔案內容」
 - **實際發生**：`-replace` + `Set-Content` 預設 encoding 不是 UTF-8，中文字元被破壞成 mojibake
 - **教訓**：**任何涉及中文字元的檔案操作，禁用 PowerShell inline 指令。** 必須用 file-based Node.js script（`fs.readFileSync / writeFileSync` with `'utf8'`）
+
+### Case 10: GAS Date toISOString() UTC 偏移
+
+- **AI reviewer 說**：「`val.toISOString().split('T')[0]` 可以把 Date 轉成 YYYY-MM-DD」
+- **實際發生**：GAS `getValues()` 回傳的 Date 是 Asia/Taipei 時區（UTC+8）。`toISOString()` 轉 UTC，midnight `2026-02-01 00:00 +08:00` 變成 `2026-01-31T16:00:00.000Z`，`.split('T')[0]` = `2026-01-31` — **日期差一天**
+- **Subagent review 說**：「`instanceof Date` is standard pattern, low risk」→ 標 🟡 放過
+- **根因**：reviewer 只看了 type check 是否正確，沒追問「轉換後的值對不對」。平台時區行為是隱性假設
+- **教訓**：**Date → string 必須用 timezone-aware 方法（如 `Utilities.formatDate(date, 'Asia/Taipei', 'yyyy-MM-dd')`），禁用 `toISOString()`。** 審查時看到 `toISOString()` 就要追問：「這個 Date 是哪個時區？轉 UTC 後值還對嗎？」
 
 ---
 

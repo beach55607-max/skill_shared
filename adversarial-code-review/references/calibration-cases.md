@@ -92,6 +92,28 @@ Read these before your first adversarial review. All are **real incidents where 
 
 ---
 
+## Case 9: PowerShell UTF-8 Corruption
+
+- **AI Said**: "Use PowerShell `-replace` to batch-modify file contents containing non-ASCII characters"
+- **Reality**: PowerShell `-replace` + `Set-Content` default encoding is NOT UTF-8. Non-ASCII characters (CJK, accented, emoji) get corrupted into mojibake
+- **Root Cause**: AI assumed PowerShell string operations preserve encoding. PowerShell's default output encoding varies by version and locale, and `Set-Content` does not default to UTF-8 on all systems
+- **Lesson**: **Any file operation involving non-ASCII characters must NOT use PowerShell inline commands.** Use file-based scripts with explicit encoding (e.g., Node.js `fs.readFileSync/writeFileSync` with `'utf8'`, Python `open(..., encoding='utf-8')`)
+
+**What the reviewer should have done**: Asked "what encoding does this tool use by default?" before approving any file-write operation on non-ASCII content.
+
+---
+
+## Case 10: Date Timezone Offset in Server-Side JavaScript
+
+- **AI Said**: "`val.toISOString().split('T')[0]` correctly converts Date to YYYY-MM-DD"
+- **Reality**: Server-side runtime returns Date objects in local timezone (e.g., UTC+8). `toISOString()` converts to UTC. A midnight date `2026-02-01 00:00 +08:00` becomes `2026-01-31T16:00:00.000Z`, producing `2026-01-31` — **date is off by one day**
+- **Root Cause**: Reviewer checked that `instanceof Date` is correct and the split logic is standard. Didn't question "what timezone is this Date in?" Platform timezone behavior is an implicit assumption
+- **Lesson**: **Date → string conversion must account for timezone.** In server-side environments, use explicit timezone-aware formatting (e.g., `Intl.DateTimeFormat`, `Utilities.formatDate(date, 'Asia/Taipei', 'yyyy-MM-dd')`) instead of `toISOString()`
+
+**What the reviewer should have done**: Asked "what timezone is this Date object in? Will UTC conversion shift the date?"
+
+---
+
 ## How to Add Your Own Cases
 
 Track incidents where an AI reviewer gave a wrong answer and add them here:

@@ -301,7 +301,7 @@ A falsification-first code and spec review skill that forces AI reviewers to pro
 
 **Key capabilities:**
 
-- 9 calibration cases from real AI reviewer failures (not hypothetical)
+- 10 calibration cases from real AI reviewer failures (not hypothetical)
 - Three review modes: Code / Spec / Release Gate
 - Three intensity levels: L1 Fast / L2 Standard / L3 Adversarial
 - Four mandatory questions per finding (positive evidence, falsification, boundary data, path execution)
@@ -377,7 +377,7 @@ See [adversarial-code-review/README.md](adversarial-code-review/README.md) for d
 +---------------------------------------------------------------+
 
 +-- Adversarial Code Review -----------------------------------+
-| Calibration Layer  9 real AI-reviewer failure cases           |
+| Calibration Layer  10 real AI-reviewer failure cases           |
 |                    Pattern matching before review starts      |
 | Mode Layer         Code Mode (execution evidence)             |
 |                    Spec Mode (logical completeness)            |
