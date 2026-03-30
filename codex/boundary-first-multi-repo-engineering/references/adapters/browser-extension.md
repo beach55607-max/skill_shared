@@ -11,6 +11,11 @@ This runtime usually owns:
 - content-script behavior
 - extension storage and message routing
 
+## Example Scenario
+
+Example: the extension needs a new host permission and a new background message branch to fetch data from another domain.
+This adapter is primary when manifest permissions, background behavior, storage, and message routing must stay consistent as one runtime boundary.
+
 ## Protected Surfaces
 
 Treat these as contract-sensitive:

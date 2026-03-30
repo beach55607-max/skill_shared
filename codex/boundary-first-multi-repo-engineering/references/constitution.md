@@ -18,6 +18,8 @@ Follow this order:
 
 If local rules conflict with this skill, follow the local rules and explain the conflict.
 
+When two touched systems have local rules that conflict with each other, prefer the system-of-record's rules for shared contract behavior, keep the consumer compatible where possible, and escalate breaking tradeoffs to the user.
+
 ## Boundary-First Principle
 
 Before editing, identify:
@@ -28,6 +30,8 @@ Before editing, identify:
 - the high-risk surfaces affected by the change
 
 Do not start implementation while the owner boundary is still implicit.
+
+Do not guess implementation details from filenames, naming patterns, or memory alone when the local source, rules, or nearest tests are available to read.
 
 ## Protected Surfaces
 
@@ -40,6 +44,8 @@ Treat the following as design-time boundaries:
 - storage keys and durable writes
 - permissions, host access, or message channels
 - observability fields that downstream systems rely on
+
+Treat file deletes, broad moves, rename-heavy cleanup, and overwrite-heavy rewrites as protected surfaces too when they change user-owned files or repo structure.
 
 ## Finish Criteria
 

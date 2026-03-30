@@ -7,14 +7,41 @@ description: Boundary-first workflow for multi-repo coding, review, debugging, a
 
 ## Overview
 
-Use this skill for engineering tasks where the request may touch more than one repo, service, runtime, or contract surface.
+**Use when:** a task may touch more than one repo, service, runtime, or contract surface.
+**Prevents:** changing the wrong repo, missing contract boundaries, skipping rollback design, validating the wrong side.
+**Requires:** reading source and local rules before assuming implementation details.
+**Produces:** explicit owner/consumer identification, risk-matched validation, reviewable close-out with mechanical evidence.
+
 Start by identifying the owner boundary, then map contract, security, state, observability, and validation requirements before making changes.
+
+## Workflow Stages
+
+```text
+1. Classify    → What kind of change is this?
+2. Decide      → How much ceremony? (D0-D3)
+3. Plan        → Write implementation plan (D1+)
+4. Execute     → Make changes, guided by adapter
+5. Verify      → Run mechanical verification at matched depth
+6. Close out   → Structured summary with evidence
+```
 
 Read [constitution.md](./references/constitution.md) first.
 
 ## Mandatory Preflight
 
-Before planning or editing, complete this preflight internally:
+Before planning or editing:
+
+1. Run the decision gate.
+2. If the task is D1, D2, or D3, state the minimum implementation plan before coding.
+3. Then complete this preflight internally.
+
+Use:
+
+- [decision-gate.md](./references/decision-gate.md)
+- [implementation-plan-template.md](./references/implementation-plan-template.md)
+- [preflight-protocol.md](./references/preflight-protocol.md)
+
+The preflight itself remains:
 
 1. Classify the change.
 2. Identify the owner repo or runtime and the consumer.
@@ -25,31 +52,7 @@ Before planning or editing, complete this preflight internally:
 7. Map the required validation depth.
 8. Pause on stop conditions that need escalation.
 
-Read [preflight-protocol.md](./references/preflight-protocol.md) for the detailed sequence.
-
-## Handoff To Executable Spec
-
-If the task will be handed to an AI or human for execution, or preflight identifies D1+ / protected surfaces / cross-boundary contracts, convert the preflight result into a downstream executable spec before coding.
-
-Boundary-first owns the upstream questions:
-
-- D0-D3 level
-- owner repo or runtime
-- consumer surface
-- protected surfaces touched
-- validation depth
-- stop conditions or escalation points
-
-Executable-spec-planning owns the downstream contract:
-
-- Scope / Non-Scope
-- Decision Lock
-- Evidence Block
-- CONTRACT (when applicable)
-- Code Quality Constraints
-- Gate / Rollback / Final Authority sign-off
-
-Adversarial review consumes both: the boundary classification plus the executable spec.
+For high-risk changes such as auth, schema, destructive writes, permissions, or cross-boundary contract work, do not skip the decision gate or plan step just because the user asked for code quickly.
 
 ## Adapter Selection
 
@@ -64,18 +67,27 @@ Use [owner-selection.md](./references/owner-selection.md) first, then pick one a
 - browser extension: [browser-extension.md](./references/adapters/browser-extension.md)
 
 If the task spans multiple systems, read [cross-boundary-contracts.md](./references/cross-boundary-contracts.md) after owner selection.
+If multiple systems have conflicting local rules, rollout constraints, or validation expectations, read [conflict-resolution.md](./references/conflict-resolution.md).
+If no adapter matches cleanly, apply the preflight protocol directly, state the assumed system type, and prefer the system that owns validation, persistence, auth, or runtime policy.
+Treat repeated no-match cases as a signal to create a new adapter later, not as a reason to skip boundary analysis now.
 
 ## Core Non-Negotiables
 
 - Put boundaries before implementation.
+- Treat repo-local `AGENTS.md`, task specs, and guardrails as higher authority than this skill.
+- If source files, local rules, or the nearest tests were not read, do not assume implementation details.
 - Treat auth, routes, schemas, env bindings, storage keys, permissions, and message formats as protected surfaces.
-- If an executable spec exists, treat it as the downstream SSOT for scope, locked decisions, evidence, code-quality constraints, and rollback.
+- Do not delete, move, rename, or broadly overwrite user files just to make the task easier.
 - Keep default logs lean and operational; gate noisy diagnostics behind explicit debug-only paths.
 - Prefer the strongest repo-defined verification path over shallow spot checks.
 - Do not pretend caller-side validation is enough when a producer or shared contract also changes.
+- Treat durable state changes as incomplete until rollback, fallback, or blast-radius stance is explicit.
+- If a shared contract changes and only one side was validated, the task is partial or blocked, not passed.
+- D2 and D3 work require maker-checker evidence or explicit user confirmation before close-out.
 
 For deeper guidance, read:
 
+- [mechanical-verification.md](./references/mechanical-verification.md)
 - [security-and-gates.md](./references/security-and-gates.md)
 - [architecture-and-observability.md](./references/architecture-and-observability.md)
 - [validation-matrix.md](./references/validation-matrix.md)
@@ -86,12 +98,23 @@ Before finishing, make the outcome reviewable.
 
 State clearly:
 
+- decision level
 - owner repo or runtime and consumer surface
-- boundary classification used (D0/D1/D2/D3)
 - contract, auth, schema, storage, or permission surfaces touched
 - validation run, skipped, or blocked
 - rollback or compatibility risks that remain
+- maker-checker evidence when the task is D2 or D3
 
-If the task flowed into executable-spec-planning, also state the spec path and whether review consumed it as SSOT.
+Use this template when helpful:
+
+- Decision level:
+- Owner:
+- Consumer:
+- Touched surfaces:
+- Validation run:
+- Validation skipped or blocked:
+- Rollback or compatibility risk:
+- Maker-checker evidence:
+- Residual unknowns:
 
 If the task touches a stop-condition surface and executable verification is unavailable, call that out explicitly instead of treating the skill alone as sufficient evidence.

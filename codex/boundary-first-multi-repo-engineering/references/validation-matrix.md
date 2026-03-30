@@ -8,9 +8,8 @@ Use this reference after the owner path is clear.
 2. Run repo-standard lint and test commands.
 3. Run the stronger build, package, gate, or integration path when the repo defines one.
 
-When executable-spec-planning is in play, record the chosen validation path inside the spec's phase gates and close-out.
-
 Do not stop at unit tests alone when the affected system owns auth, persistence, schema, permissions, or shared contracts.
+If a shared contract changes, one-side-only validation is partial evidence, not a pass.
 
 ## Validation By Adapter
 
@@ -49,12 +48,6 @@ Do not stop at unit tests alone when the affected system owns auth, persistence,
 - repo-standard lint and test
 - build or packaging verification
 - runtime smoke checks when manifest, permissions, or host access change
-
-## Mapping Into Executable Spec
-
-- D0 local work may use `guards/gate-quick-d0.md` plus the narrowest relevant tests.
-- D1+ work should pair repo validation with the executable spec rubric and checker review.
-- Cross-repo contract changes should show both producer and consumer validation paths in the downstream spec.
 
 ## When Validation Is Blocked
 

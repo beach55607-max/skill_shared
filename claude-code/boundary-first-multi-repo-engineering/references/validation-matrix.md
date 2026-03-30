@@ -1,63 +1,54 @@
 # Validation Matrix
 
-Use this reference after the edit path is clear.
+Use this reference after the owner path is clear.
 
 ## Validation Order
 
 1. Run the narrowest relevant test first.
 2. Run repo-standard lint and test commands.
-3. Run the stronger gate command when the repo defines one and the change affects production paths.
+3. Run the stronger build, package, gate, or integration path when the repo defines one.
 
-Do not stop at lint or unit tests alone when the repo already defines a gate that bundles guards, contract checks, or build verification.
+Do not stop at unit tests alone when the affected system owns auth, persistence, schema, permissions, or shared contracts.
 
 If a shared contract changes, one-side-only validation is partial evidence, not a pass. Report it as partial or blocked in close-out.
 
-## Repo Commands
+## Validation By Adapter
 
-### `lg-proxy-worker`
+### Backend Service
 
-- Fast check: `npm run gate:quick`
-- Full gate: `npm run gate:pr`
-- Standard lint: `npm run lint`
-- Standard test: `npm run test`
+- route or handler-focused tests
+- validation or schema tests
+- storage or repository tests
+- repo-standard lint and test
+- build or strong gate when auth, persistence, or shared contracts change
 
-Use the full gate when changing: `src/`, guard-sensitive contracts, route dispatch, D1/KV logic, shared backend config, HMAC, auth, admin API, sync, rollback, or durable write paths.
+### Frontend App
 
-### `lg-s5-admin-hub`
+- mapper or state-focused tests
+- component or page tests where present
+- repo-standard lint and test
+- build verification
+- end-to-end or consumer-producer validation when backend-facing payloads change
 
-- Standard CI bundle: `npm run ci`
-- Individual: `npm run lint`, `npm run test`, `npm run lint:dup`
+### Admin Console
 
-Prioritize unit tests when changing schema validation, sync/pull behavior, or LLM review/promote helpers.
+- focused tests for review, schema, sync, or promotion flows
+- repo-standard lint and test
+- build or CI bundle when operator-visible workflows change
 
-### `lg-liff`
+### Automation Bot Or Sync Worker
 
-- Standard lint: `npm run lint`
-- Standard test: `npm run test`
-- Build check: `npm run build`
+- focused unit tests for parsers, transforms, or orchestration logic
+- dry-run or fixture-based validation when available
+- repo-standard lint and test
+- integration checks for external API, spreadsheet, or chat workflows when safe
 
-Prefer reading the repo AGENTS and GT docs to decide whether GT runner or build verification is also expected.
+### Browser Extension
 
-### `lg-linebot`
-
-- Start with repo-local lint and test commands from `package.json` and `AGENTS.md`.
-- When the task touches GAS sync or HMAC flows, verify the nearest unit tests and any repo-documented CI bundle.
-
-### `lg-acl-sync`
-
-- Standard CI bundle: `npm run ci`
-- Standard lint: `npm run lint`
-- Standard test: `npm run test`
-
-Raise validation depth when changing whitelist sheet schema, trigger installers, HMAC helpers, admin delete flows, D1 pull/sync semantics, PropertiesService-backed config keys, or any GAS-to-worker contract.
-
-### `lg-thinq-ext`
-
-- Standard lint: `npm run lint`
-- Standard test: `npm run test`
-- Build check: `npm run build`
-
-Raise validation depth when changing `manifest.json`, permissions, `host_permissions`, background polling/messaging/auth flows, extension storage schema, or popup/options contracts.
+- focused tests for message routing, storage, or background logic
+- repo-standard lint and test
+- build or packaging verification
+- runtime smoke checks when manifest, permissions, or host access change
 
 ## When Validation Is Blocked
 

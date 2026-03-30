@@ -6,14 +6,14 @@ Use this reference when a task touches multiple repos and their local rules or r
 
 - Two repos have different validation requirements for the same contract.
 - A producer change is needed but the consumer repo has a freeze or restriction.
-- `AGENTS.md` in two repos gives contradictory guidance.
+- Local instructions in two repos give contradictory guidance.
 - One repo requires strict backward compatibility while another requires cleaning up deprecated fields.
 
 ## Resolution Order
 
 1. **System of record takes priority on contract shape.** The repo that owns persistence, auth, or policy defines the contract. The consumer adapts.
 2. **Security constraints take priority over convenience.** If one repo's rules are stricter on auth, permissions, or durable writes, follow the stricter rules.
-3. **Owner repo instructions take priority for shared contracts.** If `AGENTS.md` in two repos conflict on a shared surface, follow the owner repo and flag the conflict to the user.
+3. **Owner repo instructions take priority for shared contracts.** If repo-local instructions in two repos conflict on a shared surface, follow the owner repo's instructions and flag the conflict to the user.
 4. **Timing conflicts require staged changes.** If one repo is frozen or restricted, prepare the consumer-side code behind a feature flag or version check. Coordinate the producer change for when the freeze lifts.
 
 ## When To Escalate

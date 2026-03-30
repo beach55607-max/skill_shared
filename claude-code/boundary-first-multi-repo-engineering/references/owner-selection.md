@@ -1,6 +1,6 @@
 # Owner Selection
 
-Use this reference when a short user request does not name the target repo clearly.
+Use this reference when a short user request does not name the target repo or runtime clearly.
 
 ## Decision Tree
 
@@ -13,42 +13,51 @@ Did the user name a specific file or path?
 
 ### Step 2: Responsibility Check
 
-Does the task involve persistence (D1/KV/Sheets), auth (HMAC), validation, or runtime policy?
+Use this order before relying on domain clues:
 
-- YES: the owner is usually `lg-proxy-worker` for backend auth, persistence, and runtime policy. If the task is GAS-side Sheet schema, trigger/menu orchestration, or whitelist sync workflow, the owner stays in the GAS repo (`lg-s5-admin-hub`, `lg-linebot`, or `lg-acl-sync`). Go to Step 4.
-- NO: go to Step 3.
+1. If one system owns persistence, auth, or schema enforcement, start there.
+2. If one system only assembles inputs and another validates or stores them, the validating or storing system owns the shared contract.
+3. If the wire format does not change and only user interaction, rendering, or local state changes, the frontend or caller usually owns the task.
+4. If the task changes operator workflows, review states, or privileged bulk actions, the admin surface usually owns the workflow while the backend still owns the contract.
+
+If the answer is clear, go to Step 4. Otherwise, go to Step 3.
 
 ### Step 3: Domain Match
 
-- Worker routes, D1/KV, admin API, backend feature logic -> `lg-proxy-worker`
-- LIFF apps, shared frontend modules, Vite build -> `lg-liff`
-- GAS Sheet admin flows, sync/pull, backup, review/promote -> `lg-s5-admin-hub`
-- GAS LINE Bot, whitelist, store-list sync, `doPost` -> `lg-linebot`
-- ACL sync behavior -> `lg-acl-sync`
-- Chrome extension, ThinQ, Manifest V3 -> `lg-thinq-ext`
-- None of the above -> apply preflight directly, state assumed system type, and document why no adapter fit
+Match by task domain to select an adapter:
+
+- API routes, handlers, webhooks, queues, persistence -> backend-service adapter
+- Pages, components, UI state, forms, client-side composition -> frontend-app adapter
+- Operator workflows, moderation, promotions, review flows -> admin-console adapter
+- Scheduled jobs, ETL, bots, sync, spreadsheet automation -> automation-bot adapter
+- Manifest, content scripts, extension storage, background logic -> browser-extension adapter
+- None of the above -> read `fallback-adapter.md`
 
 ### Step 4: Identify Consumers
 
 For the identified owner:
 
-1. Which other repos call, depend on, or parse output from this owner?
-2. Read `CLAUDE.md` and `AGENTS.md` for every touched repo before editing.
+1. Which other systems call, depend on, or parse output from this owner?
+2. Read local instructions for every touched system before editing.
+3. If the task crosses a contract boundary, also read `cross-boundary-contracts.md`.
 
-Common cross-repo pairs:
+## Ambiguous Ownership
 
-- LIFF request payload change: `lg-liff` + `lg-proxy-worker`
-- Admin Hub sync/pull or HMAC change: `lg-s5-admin-hub` + `lg-proxy-worker`
-- GAS store-list sync contract: `lg-linebot` + `lg-proxy-worker`
-- ACL whitelist sync, health-check, or admin delete flow: `lg-acl-sync` + `lg-proxy-worker`
+When ownership is ambiguous, prefer the system that owns validation, persistence, auth, or policy. The system that enforces rules is the owner; the system that assembles inputs is the caller.
 
-If two repos have conflicting rules, read `conflict-resolution.md`.
+## When Several Systems Are Involved
+
+1. Identify the system of record.
+2. Identify the producer that defines the contract.
+3. Identify the consumer that will break if the contract changes.
+4. Read the local rules for every touched system before editing.
+
+If two systems have conflicting rules, read `conflict-resolution.md`.
 
 ## First Files To Read
 
-- `AGENTS.md`
-- `CLAUDE.md` (repo-local)
-- `package.json`
-- Closest task spec or closure report
-- The current owner file for config, schema, or routes
-- The nearest tests that already exercise the area
+- `CLAUDE.md` or `AGENTS.md` (repo-local instructions)
+- `package.json` or equivalent project manifest
+- The nearest spec or design note
+- The current owner file for routes, schema, or config
+- The closest tests that already exercise the area

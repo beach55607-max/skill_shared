@@ -11,6 +11,11 @@ This runtime usually owns:
 - privileged control paths
 - admin-side coordination with backend services
 
+## Example Scenario
+
+Example: an admin dashboard adds a new bulk approve or review-promote action.
+The admin surface owns the operator workflow and review states, but durable writes, audit behavior, and downstream compatibility may still belong to a backend or storage-owning system.
+
 ## Protected Surfaces
 
 Treat these as contract-sensitive:

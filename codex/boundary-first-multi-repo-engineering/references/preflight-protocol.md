@@ -2,6 +2,19 @@
 
 Run this protocol internally before substantial coding, debugging, or automation work.
 
+## 0. Decision Gate
+
+Before the numbered checks below, classify the task as D0, D1, D2, or D3.
+
+Use:
+
+- `decision-gate.md`
+
+If the task is D1, D2, or D3, state the minimum implementation plan before editing.
+Use:
+
+- `implementation-plan-template.md`
+
 ## 1. Change Class
 
 Classify the task into one or more:
@@ -16,6 +29,15 @@ Classify the task into one or more:
 - migration
 
 If more than one applies, let the highest-risk class drive validation depth.
+
+If the task touches auth, schema, permissions, destructive writes, or cross-boundary contracts, write down:
+
+- current assumption
+- owner
+- rollback stance
+- validation plan
+
+Do this before editing.
 
 ## 2. Owner And Boundary
 
@@ -97,19 +119,8 @@ Pause and escalate or explicitly confirm assumptions when the task includes:
 
 - auth or signature changes
 - destructive write flows
+- file deletes, broad moves, or overwrite-heavy rewrites without explicit request and rollback
 - schema migrations
 - permission changes
 - new host access
 - high-risk writes without executable verification
-
-## 9. Downstream Handoff
-
-If the task will be executed from a spec, or preflight lands at D1+ / shared contract / protected surface:
-
-- carry forward the D0-D3 level
-- carry forward owner and consumer
-- carry forward protected surfaces touched
-- carry forward validation depth and blocked commands
-- carry forward any stop-condition assumptions that need Final Authority or owner confirmation
-
-Record those items in the downstream executable spec instead of leaving them only in preflight notes.

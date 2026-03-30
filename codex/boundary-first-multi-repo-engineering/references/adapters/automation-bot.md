@@ -11,6 +11,11 @@ This runtime usually owns:
 - retry and idempotency behavior
 - automation-side diagnostics and job outcomes
 
+## Example Scenario
+
+Example: a scheduled sync job pulls rows from an external source and writes normalized records downstream.
+This adapter is primary when the hard part is transform correctness, retry safety, idempotency, or batch-side effects rather than a single UI or API surface.
+
 ## Protected Surfaces
 
 Treat these as contract-sensitive:
