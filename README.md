@@ -2,7 +2,9 @@
 
 給 AI coding agent 用的工程治理 skill（Claude Code、Codex、ChatGPT 皆適用）。
 
-三套 skill 覆蓋 AI 輔助開發的完整生命週期：
+核心哲學：**修 bug 不算完成，必須留下下次能擋住同類錯誤的 gate。** 每一次錯誤都應該沉澱成新的防線，讓系統越做越強。
+
+三套 skill 覆蓋 AI 輔助開發的完整生命週期，並形成閉環——驗證階段的發現會回流成 gate，讓下一輪的 preflight、spec、review 直接擋住同類問題：
 
 ```text
   決定            →        規劃          →       施工         →       驗證
@@ -14,6 +16,10 @@
   誰負責？           要做什麼？               改 code            AI 做對了嗎？
   什麼會壞？         驗收標準是什麼？                            用證據證明。
   怎麼回滾？         不做什麼？
+
+       ▲                                                            │
+       │              Regression Gate 回饋迴路                       │
+       └────────────── 驗證 / Incident 發現 → 沉澱為新 gate ────────┘
 ```
 
 ---
@@ -51,7 +57,7 @@
 
 | 場景 | 使用哪幾套 | 為什麼 |
 |------|-----------|--------|
-| 小 bug fix，單 repo | Adversarial Review (L1 Fast) | 只需要驗證修復正確 |
+| 小 bug fix，單 repo | Adversarial Review (L1 Fast) | 驗證修復正確 + 確認 regression gate (HR-8) |
 | 新功能，單 repo | Spec Planning → Adversarial Review (L2) | 先規劃再驗證 |
 | Schema 遷移，跨 repo | Boundary-First → Spec Planning → Adversarial Review (L3) | 完整生命週期 |
 | 審查別人的 PR | Adversarial Review (L2 Code Mode) | 用證據驗證 |
@@ -89,8 +95,8 @@ Prompt: "Write an implementation spec for the batch inventory query.
   - Decision Lock Table:
     | 決策               | 選擇                 | 負責人 | 理由                |
     |--------------------|---------------------|--------|---------------------|
-    | 查詢策略            | Batch + Promise.all | PM     | 從 N*4 降到 U+3 次  |
-    | Cache invalidation | Versioned key prefix | PM     | Edge cache TTL 問題 |
+    | 查詢策略            | Batch + Promise.all | Final Authority | 從 N*4 降到 U+3 次  |
+    | Cache invalidation | Versioned key prefix | Final Authority | Edge cache TTL 問題 |
 
   - 驗收標準：
     ✅ "7 items, 7 unique groups → 查詢次數 = 10 (U+3)"
@@ -142,6 +148,7 @@ Prompt: "Review this PR using adversarial-code-review.
   Surfaces touched: DB schema, API response shape, cache keys
   Validation: gate:pr PASS on backend, build PASS on frontend
   Rollback: schema migration is additive（向後相容）
+  Regression Gate: integration test for batch query edge cases added
 ```
 
 ---
@@ -150,7 +157,7 @@ Prompt: "Review this PR using adversarial-code-review.
 
 **Skill 1: Boundary-First Engineering** — 讓 AI agent 在改 code 之前，先把 owner、boundary、contract、rollback 想清楚。適合多 repo、跨服務、跨 runtime 的工程任務。
 
-**Skill 2: Executable Spec Planning** — 讓 AI 從模糊需求走到可執行規格書（spec），確保每個影響施工的決策都有主人、有紀錄、有驗證方式。適合新功能、遷移、重構、任何要交給 AI agent 執行的任務。
+**Skill 2: Executable Spec Planning** — 讓 AI 從模糊需求走到可執行規格書（spec），確保每個影響施工的決策都有主人、有紀錄、有驗證方式。含 Evidence Block、BDD 驗收標準、Bug-to-Gate 閉環。適合新功能、遷移、重構、任何要交給 AI agent 執行的任務。
 
 **Skill 3: Adversarial Code Review** — 讓 AI reviewer 用證偽法審查 code 和規格書，而不是表面確認「看起來對」。從 30+ 個 AI reviewer 真實判斷錯誤的案例中提煉出方法論。包含 13 個真實攔截案例的 before/after 對照。
 
@@ -159,7 +166,7 @@ Prompt: "Review this PR using adversarial-code-review.
 因為 AI coding 最昂貴的失敗，不是語法錯誤：
 
 - **Boundary-First 防的是**：owner 判錯、contract 判錯、rollback 沒想、validation 驗錯地方
-- **Spec Planning 防的是**：spec 假完整（看起來齊全但驗收條件模糊）、AI 超出 scope 自主決策、架構方向選錯但技術 gate 全過
+- **Spec Planning 防的是**：spec 假完整、AI 超出 scope 自主決策、架構方向選錯但 gate 全過、AI 幻覺（沒讀真實資料就動手）、bug 修了但沒留防線
 - **Adversarial Review 防的是**：AI reviewer 橡皮圖章（「看起來對」就 PASS）、mock PASS ≠ production PASS、log 存在 ≠ 處理存在、平台特性假設不驗證
 
 這三套可以獨立使用，也可以組合：先用 Boundary-First 判斷 owner 和風險，用 Spec Planning 寫出可執行的規格書，最後用 Adversarial Review 驗證 AI 的實作。
@@ -183,7 +190,7 @@ Prompt: "Review this PR using adversarial-code-review.
 
 ### 公開版的設計原則
 
-這個 repository 刻意保留方法論，不帶入任何內部拓樸。
+這個 repository 刻意保留方法論，不帶入任何內部拓樸（即你的 repo 之間怎麼連、誰呼叫誰、實際的服務架構）。
 
 它會教你怎麼想：owner boundary、contract risk、validation depth、rollback stance、decision lock、architecture fit、scope negative list、mechanical verification、falsification-first review。
 
@@ -228,7 +235,7 @@ You have a task
 
 | Scenario | Skills to Use | Why |
 |----------|--------------|-----|
-| Small bug fix, single repo | Adversarial Review (L1 Fast) | Just verify the fix is correct |
+| Small bug fix, single repo | Adversarial Review (L1 Fast) | Verify fix + confirm regression gate (HR-8) |
 | New feature, single repo | Spec Planning → Adversarial Review (L2) | Plan first, verify after |
 | Schema migration, multi-repo | Boundary-First → Spec Planning → Adversarial Review (L3) | Full lifecycle |
 | Reviewing someone else's PR | Adversarial Review (L2 Code Mode) | Verify with evidence |
@@ -274,7 +281,12 @@ A planning workflow that turns fuzzy requirements into executable specifications
 - CONTRACT triple (INPUT + OUTPUT + APPROVAL) for information output tasks
 - Scope Negative List to prevent AI scope creep
 - Maker-Checker separation with trust calibration
-- 25-check completeness guard (Layer A manual + Layer B executable scripts)
+- Evidence Block — forces reading real data before writing spec (anti-hallucination)
+- BDD Given-When-Then acceptance criteria with concrete field values
+- Ubiquitous Language Table for cross-system field mapping
+- D0 fast path with dedicated template and gate (`gate-quick-d0`)
+- Bug-to-Gate Closure (HR-8) — every confirmed bug must leave a regression gate
+- 31-check completeness guard (Layer A manual + Layer B executable scripts)
 - Risk escalation triggers (permission/DB mutations/fan-in/routing/prior incidents)
 - Governance audit (7 items) in close-out reports
 
@@ -289,7 +301,7 @@ A falsification-first code and spec review skill that forces AI reviewers to pro
 
 **Key capabilities:**
 
-- 8 calibration cases from real AI reviewer failures (not hypothetical)
+- 9 calibration cases from real AI reviewer failures (not hypothetical)
 - Three review modes: Code / Spec / Release Gate
 - Three intensity levels: L1 Fast / L2 Standard / L3 Adversarial
 - Four mandatory questions per finding (positive evidence, falsification, boundary data, path execution)
@@ -298,7 +310,8 @@ A falsification-first code and spec review skill that forces AI reviewers to pro
 - 6 anti-patterns that prohibit common AI reviewer shortcuts
 - Trust calibration: embed known bugs to test reviewer depth
 - Execution evidence table: reviewers must show command output, not just opinions
-- Dual checklists: 5 code-focused + 5 spec-focused
+- Dual checklists: 5 code-focused + 6 spec-focused (including CL-S6 Code Quality Constraints)
+- Bug-to-Gate check: review 不只確認這次修好，還確認同類錯誤下次會被 gate 擋住——這是系統記憶的形成方式
 - 13 real-world catches documented with before/after comparisons
 
 ---
@@ -346,22 +359,25 @@ See [adversarial-code-review/README.md](adversarial-code-review/README.md) for d
 
 +-- Executable Spec Planning -----------------------------------+
 | Pre-Spec Layer     Architecture Fit Check                     |
-|                    D0 fast path (skip ceremony if safe)       |
+|                    Step 2b: Query Actual Data (anti-hallucin) |
+|                    Evidence Block (source + data + numbers)    |
+|                    D0 fast path with dedicated gate            |
 | Spec Layer         Decision Lock Table (zero TBD gate)        |
 |                    CONTRACT triple (INPUT+OUTPUT+APPROVAL)     |
 |                    Scope Negative List                         |
 |                    Phase breakdown with rollback per phase     |
 | Review Layer       Maker != Checker separation                |
 |                    Trust calibration (embed known defect)      |
-|                    R1-R17 review dimensions                    |
-| Guard Layer        25-check completeness (Layer A manual)      |
+|                    R1-R18 review dimensions (incl Bug-to-Gate) |
+| Guard Layer        31-check completeness (Layer A manual)      |
 |                    7 executable guard scripts (Layer B)        |
 | Close-out Layer    Governance audit (7 items)                  |
+|                    Regression Gate section (HR-8)              |
 |                    Before/After metrics + rejected paths       |
 +---------------------------------------------------------------+
 
 +-- Adversarial Code Review -----------------------------------+
-| Calibration Layer  8 real AI-reviewer failure cases           |
+| Calibration Layer  9 real AI-reviewer failure cases           |
 |                    Pattern matching before review starts      |
 | Mode Layer         Code Mode (execution evidence)             |
 |                    Spec Mode (logical completeness)            |
@@ -373,10 +389,11 @@ See [adversarial-code-review/README.md](adversarial-code-review/README.md) for d
 |                    Q2 Falsification scenario (try to break it) |
 |                    Q3 Boundary data (real data, not mock)      |
 |                    Q4 Path execution (was fallback exercised?) |
+| Spec Layer         CL-S1~S6 (incl Code Quality Constraints)   |
 | Guard Layer        6 anti-patterns (prohibited shortcuts)      |
 |                    Self-falsification (disprove own findings)   |
 |                    Same-pattern expansion (grep for siblings)   |
-| Trust Layer        PM can embed known bugs to test reviewer   |
+| Trust Layer        Final Authority can embed known bugs to test reviewer   |
 |                    Honest disclosure of unverified items        |
 +---------------------------------------------------------------+
 ```
@@ -401,7 +418,7 @@ All anonymized, no internal details. These are the failure modes these skills we
 
 **Pattern 5: Wrong architecture, all gates pass.** Team builds NLP chatbot for B2B tool. Zero errors, but users need deterministic menus. Months discarded. Spec Planning checks architecture fit before writing a single line of spec.
 
-**Pattern 6: Fake-complete spec.** Spec has right sections but criteria say "works correctly." Cannot determine PASS/FAIL. Spec Planning's 25-check guard enforces mechanically decidable criteria.
+**Pattern 6: Fake-complete spec.** Spec has right sections but criteria say "works correctly." Cannot determine PASS/FAIL. Spec Planning's 31-check guard enforces mechanically decidable criteria.
 
 **Pattern 7: AI scope creep.** Agent autonomously "improves" SQL INSERT logic outside spec scope. CI passes (DB mocked). Production breaks. Spec Planning's Negative List + HR-6 prohibit unauthorized mutation changes.
 
@@ -429,7 +446,7 @@ See [adversarial-code-review/examples/real-world-catches.md](adversarial-code-re
 
 **Skill 1: Boundary-First Engineering** — 讓 AI agent 在改 code 之前，先把 owner、boundary、contract、rollback 想清楚。適合多 repo、跨服務、跨 runtime 的工程任務。
 
-**Skill 2: Executable Spec Planning** — 讓 AI 從模糊需求走到可執行規格書（spec），確保每個影響施工的決策都有主人、有紀錄、有驗證方式。適合新功能、遷移、重構、任何要交給 AI agent 執行的任務。
+**Skill 2: Executable Spec Planning** — 讓 AI 從模糊需求走到可執行規格書（spec），確保每個影響施工的決策都有主人、有紀錄、有驗證方式。含 Evidence Block、BDD 驗收標準、Bug-to-Gate 閉環。適合新功能、遷移、重構、任何要交給 AI agent 執行的任務。
 
 **Skill 3: Adversarial Code Review** — 讓 AI reviewer 用證偽法審查 code 和規格書，而不是表面確認「看起來對」。從 30+ 個 AI reviewer 真實判斷錯誤的案例中提煉出方法論。包含 13 個真實攔截案例的 before/after 對照。
 
@@ -467,7 +484,7 @@ See [adversarial-code-review/examples/real-world-catches.md](adversarial-code-re
 因為 AI coding 最昂貴的失敗，不是語法錯誤：
 
 - **Boundary-First 防的是**：owner 判錯、contract 判錯、rollback 沒想、validation 驗錯地方
-- **Spec Planning 防的是**：spec 假完整（看起來齊全但驗收條件模糊）、AI 超出 scope 自主決策、架構方向選錯但技術 gate 全過
+- **Spec Planning 防的是**：spec 假完整、AI 超出 scope 自主決策、架構方向選錯但 gate 全過、AI 幻覺（沒讀真實資料就動手）、bug 修了但沒留防線
 - **Adversarial Review 防的是**：AI reviewer 橡皮圖章（「看起來對」就 PASS）、mock PASS ≠ production PASS、log 存在 ≠ 處理存在、平台特性假設不驗證
 
 這三套可以獨立使用，也可以組合：先用 Boundary-First 判斷 owner 和風險，用 Spec Planning 寫出可執行的規格書，最後用 Adversarial Review 驗證 AI 的實作。
@@ -491,7 +508,7 @@ See [adversarial-code-review/examples/real-world-catches.md](adversarial-code-re
 
 ### 公開版的設計原則
 
-這個 repository 刻意保留方法論，不帶入任何內部拓樸。
+這個 repository 刻意保留方法論，不帶入任何內部拓樸（即你的 repo 之間怎麼連、誰呼叫誰、實際的服務架構）。
 
 它會教你怎麼想：owner boundary、contract risk、validation depth、rollback stance、decision lock、architecture fit、scope negative list、mechanical verification、falsification-first review。
 
@@ -510,7 +527,15 @@ skill_shared/
 │   ├── SKILL.md
 │   └── references/
 │       ├── spec-template.md
-│       └── completeness-guard.md
+│       ├── completeness-guard.md
+│       ├── d0-spec-template.md
+│       ├── gate-quick-d0.md
+│       ├── checker-review-prompt-template.md
+│       ├── contract-triple-template.md
+│       ├── close-out-template.md
+│       ├── spec-review-checklist.md
+│       ├── executable-spec-criteria.md
+│       └── code-quality.md
 └── adversarial-code-review/                             <- Agent-agnostic review
     ├── README.md
     ├── SKILL.md

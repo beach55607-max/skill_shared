@@ -1,440 +1,501 @@
 ---
 name: adversarial-code-review
-description: "Adversarial code review skill for AI-assisted development. Use whenever reviewing code, specs, PRs, or AI-generated output for correctness. Triggers on: 'review this code', 'check this PR', 'audit', 'verify implementation', 'is this correct', 'does this match spec', any code review request, any spec-vs-code verification, any AI output validation. This skill encodes a falsification-first review methodology distilled from 30+ real incidents where AI reviewers gave wrong answers."
+description: "Adversarial code review skill for LG LineBot ecosystem. Use whenever reviewing code, specs, PRs, or AI-generated output for correctness. Triggers on: 'review this code', 'check this PR', 'audit', 'verify implementation', 'is this correct', 'does this match spec', any code review request, any spec-vs-code verification, any AI output validation, or when the PM asks to verify another AI reviewer's output (Claude, Codex, ChatGPT, etc.). Also use when the PM says '確認', '佈署', '審查', 'review', or asks 'Claude 說的對嗎', 'Codex 說的對嗎', or 'AI 說的對嗎'. This skill encodes the PM's actual review methodology distilled from 30+ real incidents where AI reviewers gave wrong answers."
 ---
 
-# Adversarial Code Review
+# Adversarial Code Review — LG LineBot Ecosystem
 
-> **Core Principle**: The purpose of review is not to confirm "looks correct," but to prove "cannot be falsified."
-> Every PASS verdict requires positive evidence + falsification scenario exclusion. A PASS without evidence = review failure.
+> **Role Mapping**: 本 skill 中的「PM」= Final Authority。若用於非 LG 專案，請將 PM 讀作 designated Final Authority。
 
----
-
-## How This Skill Works
-
-This skill has **three review modes**. Select the mode that matches your review target:
-
-### Mode Selection
-
-| Mode | When to Use | What Gets Checked |
-|------|------------|-------------------|
-| **Code Mode** | Reviewing code changes, PRs, AI-generated code | §2-Code checklist, execution evidence required |
-| **Spec Mode** | Reviewing specs, design docs, architecture proposals | §2-Spec checklist, logical completeness required |
-| **Release Gate Mode** | Pre-deploy verification of completed work | Both checklists + deploy verification + cross-validation |
-
-### Intensity Selection (map to your risk classification)
-
-| Intensity | When | What to Run |
-|-----------|------|-------------|
-| **L1 Fast** | Low-risk, no protected surface (typo, comment, UI copy) | §1 Q1+Q2 only, skip checklists |
-| **L2 Standard** | Normal feature work within one service | Full §1 + §2 + §3 |
-| **L3 Adversarial** | Cross-service, schema change, auth, durable writes, deployment | Full §0-§8 including self-falsification and pattern expansion |
-
-If your project uses a severity classification (D0-D3 or similar), map it:
-- D0 → L1 Fast
-- D1 → L2 Standard
-- D2/D3 → L3 Adversarial
-
-### What This Skill Is NOT
-
-- **Not a CI/CD replacement.** This skill reviews; it doesn't build, test, or deploy.
-- **Not a deploy governance framework.** Owner, rollback, blast radius decisions are your team's responsibility.
-- **Not a schema migration tool.** Schema governance requires its own framework.
-- **Not automatic approval.** A PASS means "reviewer verified with evidence," not "safe to ship."
-
-If your team needs deploy governance, pair this with a boundary-first engineering workflow or your existing deploy process.
+> **Core Principle**: 審查的目的不是確認「看起來對」，而是證明「無法被證偽」。
+> 每一個 PASS 判定都需要正面證據 + 反證場景排除。沒有證據的 PASS = 審查失敗。
 
 ---
 
-## §0 Calibration Cases
+## 審查模式與強度
 
-Read these before your first review. All are **real incidents where AI reviewers gave wrong answers**.
+### 模式選擇
 
-> See [references/calibration-cases.md](references/calibration-cases.md) for full case details.
+| 模式 | 使用時機 | 檢查內容 |
+|------|---------|---------|
+| **Code Mode** | 審查 code 改動、PR、AI 產出的 code | §2 Code Checklist（CL-1~CL-5），需要執行證據 |
+| **Spec Mode** | 審查規格書、設計文件、架構提案 | §2-Spec Checklist（CL-S1~CL-S6），需要邏輯完整性證據 |
+| **Release Gate Mode** | 部署前驗證 | 兩套 checklist + deploy 驗證 + 交叉驗證 |
 
-**Summary of failure patterns:**
+### 強度選擇（對接 Boundary-First D0-D3）
 
-| Case | AI Said | Reality | Lesson |
-|------|---------|---------|--------|
-| C-1 | "Adapter returns raw data correctly" | DB stores `'ACTIVE'` (uppercase), code compares `'active'` (lowercase) → all items misclassified | **Test mock values must reflect production data format, not code expectations** |
-| C-2 | "Can reuse existing query logic for new data source" | Same field name, different semantics (computed vs raw) → stale data returned | **Same field name in different sources can have completely different definitions** |
-| C-3 | "Hardcoded default is a code smell" | Upstream adapter already handles mapping; default is defensive fallback | **Trace at least one layer up AND down before concluding** |
-| C-4 | "Consistency check is implemented" | Code only logs mismatch, no actual fallback branch | **"Has log" ≠ "Has handling"** |
-| C-5 | "After writing to cache, next read returns new value" | Edge cache with 24h TTL not invalidated by store write | **Platform consistency model must be verified, not assumed** |
-| C-6 | "Spec says feature X is filtered, so code does it" | Code has no such filter; spec described intent, not implementation | **Verify code against spec, never spec against code** |
-| C-7 | "All tests pass, conflict handling is correct" | Test mock doesn't run real SQL; production constraint differs from code assumption → silent data loss | **Test mocks don't validate SQL semantics** |
-| C-8 | "Function is updated, just re-execute" | Editor shows new code but runtime runs cached old version | **Deployment state must be verified, not trusted** |
-
----
-
-## §1 Four Mandatory Questions
-
-**Every review item must answer these 4 questions. Missing any one = incomplete review.**
-
-### Q1: Positive Evidence
-
-> "What specific code line / test case / log output is your PASS based on?"
-
-- Must cite specific file path + line number or function name
-- "I read the code and it looks right" is NOT evidence
-- No line-number citation → auto-downgrade to 🟡 UNVERIFIED
-
-### Q2: Falsification Scenario
-
-> "Under what conditions would this code produce wrong results? Did you verify those scenarios?"
-
-- List at least 2 boundary conditions that could cause failure
-- If you cannot think of any → explain why (pure function / exhaustive test)
-- C-1 and C-2 are cases where falsification scenarios were missed
-
-### Q3: Boundary Data Validation
-
-> "What real data / golden test / manual calculation did you use to verify correctness?"
-
-- Mock PASS ≠ production PASS (C-1 lesson)
-- For numeric calculations: show arithmetic for at least 1 real scenario, **with formula and result**
-- For JOINs / queries: list actual key values and matching logic
-
-### Q4: Path Execution Evidence
-
-> "Has the fallback / error / edge-case code path actually been exercised? Evidence?"
-
-- Log exists ≠ path exercised (C-4 lesson)
-- Test covers happy path ≠ error path tested
-- No execution evidence → 🟡 UNVERIFIED, not ✅ PASS
+| 強度 | 對應 | 什麼時候用 | 跑哪些章節 |
+|------|------|-----------|-----------|
+| **L1 Fast** | D0（無 protected surface） | 改 comment、UI copy、typo | §1 Q1+Q2 only，跳過 checklist |
+| **L2 Standard** | D1（單 repo protected surface） | 一般 feature、bug fix | 完整 §1 + §2 + §3 + §6 同 pattern |
+| **L3 Adversarial** | D2/D3（跨 repo contract、auth/HMAC、schema migration、durable write） | 跨 repo、D1/KV schema、HMAC、部署 | 完整 §0-§8，含反證存活制 + 同 pattern + deploy 驗證 |
 
 ---
 
-## §2-Code: Code Review Checklist
+## §0A 上下游對齊（Boundary-First → Executable Spec → Review）
 
-### CL-1: Database Queries
+- 若上游已有 `boundary-first-multi-repo-engineering` 輸出，**直接繼承** D0-D3、owner、consumer、surfaces touched、validation path；不要在 review 階段自己重造分類。
+- 若上游已有 `executable-spec-planning` spec，**把 spec 視為 SSOT**，至少核對：Scope/Non-Scope、Decision Lock、CONTRACT（如適用）、Evidence Block、Ubiquitous Language Table、Code Quality Constraints、Rollback / Kill Switch、Final Authority 邊界。
+- 若上游 artifact 缺失或互相矛盾，標記為 `UNVERIFIED` 或 `NO-GO candidate`，並要求補 spec / 補 preflight；**不得用 reviewer 自己的猜測補齊**。
+- Reviewer 的責任是提出 finding 與 recommendation。最終 GO / NO-GO 由 Final Authority 宣告。
 
-| # | Check | Typical Error |
-|---|-------|---------------|
-| 1 | JOIN key field names + case match? | C-1: `'ACTIVE'` vs `'active'` |
-| 2 | Conflict/upsert constraint matches actual unique index? | C-7: constraint name mismatches production schema |
-| 3 | Query parameters are parameterized (no string concatenation)? | Dynamic SQL = injection risk |
-| 4 | WHERE covers all necessary filters? | Missing status filter → returns deleted/inactive rows |
-| 5 | Batch `IN (?)` correctly expanded? | Some DBs don't support array params; must expand to `IN (?,?,?)` |
-| 6 | NULL handling: `= ?` doesn't match NULL, need `IS NULL` | Missing NULLs → no results but no error |
-| 7 | DDL/DML logic changes verified against production schema? | C-7: mock PASS but real constraint differs |
+---
 
-### CL-2: Cache / Storage Keys
+## §0 校準案例（Calibration Cases）
 
-| # | Check | Typical Error |
-|---|-------|---------------|
-| 1 | Key prefix has no namespace collision? | `user:session:` vs `user:settings:` overlap |
-| 2 | Cache TTL + invalidation strategy correct? | C-5: edge cache independent from store writes |
-| 3 | CLI commands target correct environment (remote vs local)? | Default may operate on local storage |
-| 4 | Key format change has migration for old-format keys? | Old keys orphaned, no read path |
-| 5 | Feature flag fallback chain correct? | Flag store → config → hardcode, each layer verified |
+以下 9 個案例都是 **AI reviewer（含 Claude / Codex）曾經判斷錯誤** 的真實事件。審查前先讀這些案例校準直覺。
 
-### CL-3: Data Semantics
+### Case 1: discontinued_status 大小寫（JOIN Key Mismatch）
 
-| # | Check | Typical Error |
-|---|-------|---------------|
-| 1 | Same field name in different sources has same definition? | C-2: `availableQty` computed vs raw |
-| 2 | Adapter layer normalizes all enum/status values? | C-1: raw pass-through |
-| 3 | Numeric unit and precision consistent? | Integer vs float, currency mismatch |
-| 4 | Timestamp format and timezone consistent? | ISO 8601 + UTC vs local timezone |
-| 5 | Mock values reflect real production data format? | C-1: mock matches code but not production |
-| 6 | Calculation formula matches spec / other system? | Manual arithmetic verification |
-| 7 | After deployment, is runtime actually executing new version? | C-8: editor shows new but runtime runs cached old |
+- **AI reviewer 說**：「D1 adapter 回傳 raw data，code 正確比對 discontinued_status」
+- **實際發生**：D1 存 `'NORMAL'`（大寫），code 比對 `'normal'`（小寫）→ 所有品項誤判為停產
+- **根因**：Adapter 做 raw pass-through，沒有正規化層。test mock 用了 `'normal'`（跟 code 一致），所以 vitest PASS，但跟真實 D1 資料不一致
+- **教訓**：**Test mock 的值必須反映真實資料格式，不是用程式碼期望格式。** mock 跟 code 一致 ≠ mock 跟 production data 一致
+
+### Case 2: KV Combo Snapshot vs D1 Raw Data（資料語義混淆）
+
+- **AI reviewer 說**：「D1 path 可以複用現有 KV combo 查詢邏輯」
+- **實際發生**：KV combo 存的是 GAS 預計算好的 materialized view（已含 fair share），D1 存的是 raw stock data → schemaVersion 不匹配 → 回傳 stale 預設值
+- **根因**：同一個欄位名（`availableQty`），在 KV 是 computed output，在 D1 是 raw input。審查者沒分辨「同名不同義」
+- **教訓**：**同欄位名在不同資料來源可能有完全不同的語義。** 必須追蹤資料從 source → transform → consumer 的完整路徑
+
+### Case 3: Q2d 誤判（追蹤深度不足）
+
+- **AI reviewer 說**：「`acsErvSubsetDL` hardcode `modelType: 'ACS'`，是 hardcoding 隱患」
+- **實際發生**：adapter 層有正確的 snake→camel 映射，`|| 'ACS'` 只是 defensive fallback
+- **根因**：Review 只看到一層就下結論，沒追到 adapter 層的轉換邏輯
+- **教訓**：**看到疑似問題時，必須往上下游各追至少一層再下結論。** 否則 false positive 會浪費修復時間
+
+### Case 4: sync_batch_id Fallback 未行使
+
+- **AI reviewer 說**：「sync_batch_id 一致性檢查已實作」
+- **實際發生**：code 只 log mismatch，沒有真正 fallback 到 KV（spec 要求 fallback）。log 存在 ≠ 邏輯存在
+- **根因**：`console.warn` 被當成「處理了」，但 warn 後繼續用 D1 結果回覆使用者，完全沒有 fallback 分支
+- **教訓**：**「有 log」≠「有處理」。** fallback 路徑必須有 code path 證據（if/else/return/throw），不是只有 log
+
+### Case 5: KV Edge Cache 不被 KV.put() Invalidate
+
+- **AI reviewer 說**：「更新 KV 值後，下次讀取就會拿到新值」
+- **實際發生**：`cacheTtl: 86400` 的 edge cache 不被 `KV.put()` invalidate。舊值在其他 colo 繼續 serve 24hr
+- **根因**：審查者把 KV 當成強一致性存儲，忽略 Cloudflare KV 的 eventually consistent 特性 + edge cache 獨立於 KV store
+- **教訓**：**平台特性假設必須驗證。** Cloudflare KV、GAS CacheService、LINE API 等都有各自的 consistency model
+
+### Case 6: scoringEngine.selectTop3() 不檢查 active 欄位
+
+- **PM 決策文件說**：「selectTop3 會過濾 active=false 的 feature」
+- **實際 code**：selectTop3 從 totalScore 排序取 top 3，完全沒有 `feature_master.active` 的 filter
+- **根因**：PM 決策文件描述的是「應該做的事」，不是「已經做的事」
+- **教訓**：**PM 決策文件 ≠ code ground truth。** 永遠要用 code 驗證文件，不是用文件驗證 code
+
+### Case 7: vitest Mock D1 的語義陷阱
+
+- **AI reviewer 說**：「vitest 全 PASS，ON CONFLICT 邏輯正確」
+- **實際發生**：vitest mock D1 只驗 JS 邏輯，不跑真實 SQL。PR#30 把 INSERT 改成 `ON CONFLICT(user_id) DO NOTHING`，mock PASS，但 production D1 的 UNIQUE constraint 是 `(code, role)` 不是 `(user_id)` → 資料靜默丟失
+- **教訓**：**vitest mock 不驗 SQL 語義。** `ON CONFLICT` / `INSERT` / `UPDATE` / `DELETE` 的邏輯結構變更，必須拿 production schema（`PRAGMA table_info` + `PRAGMA index_list`）交叉比對，不能只信 mock PASS
+
+### Case 8: GAS Ghost Code
+
+- **AI reviewer 說**：「GAS 函式已更新，重新執行即可」
+- **實際發生**：GAS editor 畫面顯示新 code，但執行環境跑的是 cached 舊版。`clasp push` 沒加 `--force` 被 skip，或 push 成功但 runtime 仍用舊版
+- **教訓**：**GAS 部署狀態不可信。** 解法：`99_Hotfix` 檔案（字母序最後載入，強制覆蓋函式定義）。驗證方式：在函式開頭加 `Logger.log('v2_TIMESTAMP')` 確認 runtime 版本
+
+### Case 9: PowerShell UTF-8 Corruption
+
+- **AI reviewer 說**：「用 PowerShell `-replace` 批次修改中文檔案內容」
+- **實際發生**：`-replace` + `Set-Content` 預設 encoding 不是 UTF-8，中文字元被破壞成 mojibake
+- **教訓**：**任何涉及中文字元的檔案操作，禁用 PowerShell inline 指令。** 必須用 file-based Node.js script（`fs.readFileSync / writeFileSync` with `'utf8'`）
+
+---
+
+## §1 四問必答（Four Mandatory Questions）
+
+**每一個審查項目都必須回答以下 4 個問題，缺一不可：**
+
+### Q1: 正面證據（Positive Evidence）
+
+> 「你的 PASS 判定基於什麼具體 code 行號 / test case / log output？」
+
+- 必須引用具體檔案路徑 + 行號或函式名
+- 「看了 code 覺得對」不算證據
+- 沒有行號引用的 PASS = 自動降級為 🟡 UNVERIFIED
+
+### Q2: 反證場景（Falsification Scenario）
+
+> 「什麼情境下這段 code 會產出錯誤結果？你驗證了這些場景嗎？」
+
+- 列出至少 2 個可能出錯的邊界條件
+- 如果無法想到任何反證場景 → 說明為什麼（可能是純函數 / 窮舉 test）
+- Case 1/2 都是反證場景沒被想到的案例
+
+### Q3: 邊界資料驗證（Boundary Data Validation）
+
+> 「你用什麼真實資料 / golden test / 手算計算驗證了正確性？」
+
+- mock data PASS ≠ production data PASS（Case 1 教訓）
+- 涉及數值計算時，必須手算至少 1 筆，**附算式和結果**
+- 涉及 JOIN / 查詢時，必須列出 key 的真實值和匹配邏輯
+
+### Q4: 路徑行使證據（Path Execution Evidence）
+
+> 「fallback / error / edge-case 的 code path 有被行使過嗎？證據？」
+
+- log 存在 ≠ 路徑被行使（Case 4 教訓）
+- test 覆蓋 happy path ≠ error path 被測試
+- 如果沒有行使證據 → 🟡 UNVERIFIED，不是 ✅ PASS
+
+---
+
+## §2 五類 Checklist
+
+### CL-1: SQL / D1 查詢
+
+| # | 檢查項 | 典型錯誤 |
+|---|--------|---------|
+| 1 | JOIN key 的欄位 + 大小寫是否一致？ | Case 1: `'NORMAL'` vs `'normal'` |
+| 2 | `ON CONFLICT` 的 constraint name 是否對應正確的 UNIQUE index？ | PR#30: 有了 constraint 但沒注意語義變更 |
+| 3 | `.prepare()` 的參數是否為 string literal？ | guard-sql-safety: 動態 SQL = injection 風險 |
+| 4 | WHERE 條件是否覆蓋所有必要欄位？ | 缺 `discontinued_status != 'discontinued'` → 回傳停產品項 |
+| 5 | 批次查詢的 `IN (?)` 是否正確展開？ | D1 不支援陣列參數，必須展開為 `IN (?,?,?)` |
+| 6 | NULL 處理：`column = ?` 不匹配 NULL，要用 `IS NULL` | 遺漏 NULL 值 → 查無結果但不報錯 |
+| 7 | `ON CONFLICT` / `INSERT` / `UPDATE` / `DELETE` 邏輯變更是否比對 production schema？ | Case 7: mock PASS 但 constraint name 對不上 production UNIQUE index |
+
+### CL-2: KV / Storage Key
+
+| # | 檢查項 | 典型錯誤 |
+|---|--------|---------|
+| 1 | Key prefix 是否有 namespace 衝突？ | `inv:combo:` vs `inv:unit:` 邊界偵測 |
+| 2 | `cacheTtl` 設定後，edge cache 不會被新 put 清除 | Case 5: edge cache 獨立於 store |
+| 3 | `wrangler kv` 指令是否加了 `--remote`？ | 預設操作 local storage |
+| 4 | Key 格式變更時，舊格式的 key 怎麼處理？ | 新舊 key 並存和過渡讀取邏輯 |
+| 5 | Feature flag 的 fallback chain：FLAGS_KV → config → hardcode | 確認 fallback 各層基底正確 |
+| 6 | PowerShell 操作含中文的檔案/KV value？ | Case 9: `-replace` / `Set-Content` 破壞 UTF-8 中文 |
+
+### CL-3: 資料語義（Data Semantics）
+
+| # | 檢查項 | 典型錯誤 |
+|---|--------|---------|
+| 1 | 同欄位名在不同來源是否同定義？ | Case 2: `availableQty` KV=computed, D1=raw |
+| 2 | Adapter 層是否正規化所有 enum/status 值？ | Case 1: raw pass-through |
+| 3 | 數值的單位和精度是否一致？ | 整數 vs 浮點、TWD vs USD |
+| 4 | 時間欄位的格式和時區？ | ISO 8601 + UTC vs Asia/Taipei |
+| 5 | Mock 的值是否反映真實資料格式？ | Case 1: mock='normal' 但 D1='NORMAL' |
+| 6 | 計算公式是否跟 spec / GAS 端一致？ | GT-22 fair share 手算驗證 |
+| 7 | GAS 部署後 runtime 是否真的跑新版？ | Case 8: editor 顯示新 code 但 runtime 跑 cached 舊版 |
 
 ### CL-4: Fallback / Error Handling
 
-| # | Check | Typical Error |
-|---|-------|---------------|
-| 1 | Error path has concrete handling (not just logging)? | C-4: logs warning but no fallback branch |
-| 2 | Fallback return value: does caller have null check? | Fallback returns null, caller assumes non-null |
-| 3 | try-catch doesn't swallow important errors? | `catch(e) {}` silent swallow |
-| 4 | Timeout has upper bound? Behavior when exceeded? | API response deadlines, platform execution limits |
-| 5 | Circuit breaker / kill switch is exercisable? | Config key exists ≠ code reads and branches on it |
-| 6 | Rollback executable within acceptable timeframe? | Config rollback (seconds) vs code deploy (minutes) |
+| # | 檢查項 | 典型錯誤 |
+|---|--------|---------|
+| 1 | Error path 是否有具體處理（不是只 log）？ | Case 4: log mismatch but no fallback |
+| 2 | fallback 後的回傳值 caller 有 null check？ | fallback 回傳 null 但 caller 沒 null check |
+| 3 | try-catch 是否 swallow 了重要錯誤？ | `catch(e) {}` 靜默吞錯 |
+| 4 | timeout 是否有上限？超時後的行為？ | LINE reply 5 秒限制、GAS 6 分鐘限制 |
+| 5 | Circuit breaker / kill switch 是否可行使？ | KV key 存在 ≠ code 有讀取和判斷邏輯 |
+| 6 | Rollback 指令是否可在 < 60 秒內執行？ | `wrangler kv key put` 秒級 vs code deploy 分鐘級 |
+| 7 | Bug 已修，但是否留下 regression gate？若沒有，是否有合理豁免？ | HR-8: 修了但沒 gate = 只是人類短期記住，gate 要加在根因層 |
 
-### CL-5: Temporal / Cross-Phase Dependencies
+### CL-5: 跨 Phase 時間相依
 
-| # | Check | Typical Error |
-|---|-------|---------------|
-| 1 | Current workaround survives next phase? | Write-through removed in future phase breaks read path |
-| 2 | Feature flag lifecycle has removal spec? | Flag switch without rollback path |
-| 3 | Defense mechanism works after dependency removed? | Fallback depends on soon-to-be-retired service |
-| 4 | Test mocks updated after schema change? | DDL adds column but test fixture is stale |
-| 5 | Both sides of cross-service API updated together? | One side changes contract, other side doesn't follow |
-
----
-
-## §2-Spec: Spec Review Checklist
-
-### CL-S1: Requirements Completeness
-
-| # | Check | Typical Error |
-|---|-------|---------------|
-| 1 | Boundary conditions defined? (empty, zero, max, single item) | "Supports batch processing" — what if batch = 0? |
-| 2 | Exception scenarios enumerated? | Only happy path described |
-| 3 | Undefined behavior explicitly called out? | Implicit "won't happen" assumptions |
-| 4 | Acceptance criteria mechanically decidable? | "Works correctly" is not testable |
-| 5 | Scope boundaries explicit? What is NOT in scope? | AI agent scope creep |
-
-### CL-S2: Internal Consistency
-
-| # | Check | Typical Error |
-|---|-------|---------------|
-| 1 | Numbers agree across sections? | §3 says "≤4 queries" but §5 implies N queries |
-| 2 | State transitions complete? (every state has defined exits) | Status has active/inactive but no reactivation path |
-| 3 | Timing / ordering assumptions explicit? | Assumes System A completes before System B reads |
-| 4 | Terminology consistent throughout? | "User" vs "member" vs "account" used interchangeably |
-
-### CL-S3: Implementability
-
-| # | Check | Typical Error |
-|---|-------|---------------|
-| 1 | Vague verbs identified? ("handle", "process", "manage") | Implementer doesn't know what to build |
-| 2 | Hidden dependencies surfaced? | Requires data from system not mentioned in spec |
-| 3 | Performance claims have backing math? | "Improves performance" — by how much? measured how? |
-| 4 | Rollback defined per phase? | No recovery path if phase 3 fails |
-
-### CL-S4: Data Contract
-
-| # | Check | Typical Error |
-|---|-------|---------------|
-| 1 | Field names, types, nullability defined? | "Returns user data" — which fields? nullable? |
-| 2 | Cross-system field semantics aligned? | Same field name, different meaning (C-2 pattern) |
-| 3 | Enum values exhaustive + normalized? | Case mismatch between systems (C-1 pattern) |
-| 4 | Schema migration path defined for breaking changes? | New column added but consumers not updated |
-
-### CL-S5: Security / Permissions / State Machine
-
-| # | Check | Typical Error |
-|---|-------|---------------|
-| 1 | Role × operation matrix defined? | "Admin can manage" — manage what exactly? |
-| 2 | Auth/signing format identical on sender and receiver? | Canonical format drift |
-| 3 | Durable write has rollback stance? | Bulk delete with no undo path |
-| 4 | State transitions have authorization gates? | Any user can transition any status |
+| # | 檢查項 | 典型錯誤 |
+|---|--------|---------|
+| 1 | 當前 phase 的 workaround，後續 phase 會不會失效？ | KV write-through 在 Phase 5 被拔掉，依賴 KV 的 path 失效 |
+| 2 | Feature flag 的生命週期移除是否有 spec？ | flag 從 KV→D1 切換但沒有 rollback 路徑 |
+| 3 | 防禦機制在依賴被拔後是否仍有效？ | Phase 5 後只剩 L6 oracle |
+| 4 | test mock 是否在 schema 變更後 stale？ | DDL 加了欄位但 test fixture 沒更新 |
+| 5 | GAS 端的 code 跟 CFW 端是否同步更新？ | 一邊改了 API contract，另一邊沒跟 |
 
 ---
 
-## §3 Six Anti-Patterns (Prohibited Review Behaviors)
+## §2-Spec: 規格書審查 Checklist（Spec Mode 使用）
 
-### AP-1: "Looks Good" Rubber Stamp
+### CL-S1: 需求完整性
 
-- :x: "This code looks correct"
-- :white_check_mark: "This code at `file.js:L42` does X, which matches spec §3.2 requirement Y. Falsification scenario Z is covered by test case TC-05."
+| # | 檢查項 | 典型錯誤 |
+|---|--------|---------|
+| 1 | 邊界條件是否定義？（空、零、最大、單筆） | 「支援批次處理」— batch = 0 時怎麼辦？ |
+| 2 | 例外情境是否列舉？ | 只描述 happy path |
+| 3 | 未定義行為是否明確標出？ | 隱含的「不會發生」假設 |
+| 4 | 驗收標準是否可機械判定？ | 「功能正常」不是可測試的標準 |
+| 5 | Scope 邊界是否明確？什麼不在 scope 內？ | AI agent scope creep |
 
-### AP-2: Trust Mock = Trust Production
+### CL-S2: 內部一致性
 
-- :x: "All tests pass so logic is correct"
-- :white_check_mark: "Tests PASS proving code matches mock. But need to verify mock values reflect production data format (C-1 lesson)."
+| # | 檢查項 | 典型錯誤 |
+|---|--------|---------|
+| 1 | 各章節的數字是否一致？ | §3 說「≤4 次查詢」但 §5 暗示 N 次 |
+| 2 | 狀態轉換是否完整？（每個狀態都有定義的出口） | status 有 active/inactive 但沒有重新啟用路徑 |
+| 3 | 時序 / 順序假設是否明確？ | 假設系統 A 完成後系統 B 才讀取 |
+| 4 | 術語是否全文一致？ | 「使用者」vs「會員」vs「帳號」混用 |
 
-### AP-3: Verify Code With Spec (Causation Reversed)
+### CL-S3: 可實作性
 
-- :x: "Spec says it filters active items, so code must do it"
-- :white_check_mark: "Spec says it filters active items. I searched the function — no active-related filter found. This is a spec-code gap." (C-6 lesson)
+| # | 檢查項 | 典型錯誤 |
+|---|--------|---------|
+| 1 | 是否有模糊動詞？（「處理」、「管理」、「支援」） | 實作者不知道要做什麼 |
+| 2 | 隱性依賴是否浮出？ | 需要某個 spec 沒提到的系統的資料 |
+| 3 | 效能宣稱是否有數學支撐？ | 「改善效能」— 改善多少？怎麼量？ |
+| 4 | 每個 phase 是否定義 rollback？ | Phase 3 失敗時沒有回復路徑 |
 
-### AP-4: Log Exists = Handling Exists
+### CL-S4: 資料契約
 
-- :x: "There's a `console.warn('mismatch')` so it's handled"
-- :white_check_mark: "`console.warn` at L55, but L56 continues using stale result. No if/else branch for fallback path." (C-4 lesson)
+| # | 檢查項 | 典型錯誤 |
+|---|--------|---------|
+| 1 | 欄位名、型別、可 null 性是否定義？ | 「回傳使用者資料」— 哪些欄位？可 null？ |
+| 2 | 跨系統欄位語義是否對齊？ | 同欄位名不同意思（Case 2 pattern） |
+| 3 | Enum 值是否窮舉 + 正規化？ | 大小寫不一致（Case 1 pattern） |
+| 4 | Breaking change 是否有 schema migration 路徑？ | 新增欄位但 consumer 沒更新 |
 
-### AP-5: Stop at First Layer
+### CL-S5: 安全 / 權限 / 狀態機
 
-- :x: "`|| 'DEFAULT'` is a hardcoding risk"
-- :white_check_mark: "`|| 'DEFAULT'` at L30. Tracing upstream: caller at adapter.js:L88 already maps the raw field. `|| 'DEFAULT'` is defensive fallback, not hardcoding." (C-3 lesson)
+| # | 檢查項 | 典型錯誤 |
+|---|--------|---------|
+| 1 | 角色 × 操作矩陣是否定義？ | 「admin 可以管理」— 管理什麼？ |
+| 2 | Auth/簽章格式 sender 和 receiver 是否一致？ | HMAC canonical format drift |
+| 3 | Durable write 是否有 rollback stance？ | 批次刪除沒有 undo 路徑 |
+| 4 | 狀態轉換是否有授權閘門？ | 任何使用者都能轉換任何狀態 |
 
-### AP-6: Assume Platform Behavior
+### CL-S6: Code Quality Constraints
 
-- :x: "After cache write, next read returns new value"
-- :white_check_mark: "Platform uses eventually consistent caching. Edge cache with TTL is not invalidated by store writes. Need versioned keys or short TTL." (C-5 lesson)
-
----
-
-## §4 Verdict Levels
-
-| Level | Symbol | Definition | Condition |
-|-------|--------|------------|-----------|
-| FAIL | :red_circle: | Confirmed bug or spec-code gap | Specific code line + reproducible scenario |
-| UNVERIFIED | :yellow_circle: | Cannot confirm correctness | Any Q1-Q4 unanswerable, or lacks production evidence |
-| PASS | :white_check_mark: | Confirmed correct | All Q1-Q4 answered with positive evidence + falsification excluded |
-| N/A | :black_medium_square: | Not applicable | Checklist item not relevant in this context |
-
-**Escalation rules:**
-
-- :yellow_circle: can downgrade to :red_circle: (found concrete falsification)
-- :yellow_circle: can upgrade to :white_check_mark: (supplied missing Q1-Q4 evidence)
-- :white_check_mark: cannot revert to :yellow_circle: (unless new falsification found)
-- Any :red_circle: in review → overall NO-GO
-
----
-
-## §5 Self-Falsification (L3 only)
-
-After finding an issue, **spend equal effort trying to disprove your own finding**:
-
-1. For each :red_circle: finding, construct a "actually this is fine" argument
-2. If you can disprove it → downgrade to :yellow_circle: or remove
-3. If you can't disprove it → keep :red_circle: and record the disproof attempt as extra evidence
-4. For each :white_check_mark:, ask: "Which calibration case pattern (C-1 through C-8) could repeat here?"
-
-**Purpose**: Prevent over-reporting (padding findings) and under-reporting (confirmation bias).
+| # | 檢查項 | 典型錯誤 |
+|---|--------|---------|
+| 1 | 共用抽象是否有穩定 consumer 或明確 variation point？ | 只有單一 caller 也硬抽 shared util |
+| 2 | duplication / consolidation 的 tradeoff 是否有明寫？ | 為了 DRY 把不同語義流程硬合併 |
+| 3 | 新跨模組依賴是否浮出到 spec？ | code 依賴了 spec 沒列出的 module |
+| 4 | mock boundary / real-data boundary 是否明確？ | 只寫「測試會補」但沒說哪些要用真實資料 |
+| 5 | observability / failure containment 是否定義？ | 新路徑上線後沒有 timeout / fallback / kill switch 說明 |
 
 ---
 
-## §6 Same-Pattern Expansion (L2+ only)
+## §3 六條 Anti-Pattern（禁止的審查行為）
 
-When you find a bug or flag an issue, ask:
+### AP-1: 「看起來對」速蓋
 
-1. **"Where else does this same pattern exist?"** — Other fields in the same adapter? Other queries with the same JOIN?
-2. **"Where else is this assumption used?"** — If a mock format is wrong, are other test mocks also wrong?
-3. **"Who would this fix break?"** — If you add `.toLowerCase()`, does downstream expect uppercase?
+- :x: 「這段 code 看起來正確」
+- :white_check_mark: 「這段 code 在 `file.js:L42` 做了 X，與 spec §3.2 要求的 Y 一致。反證場景 Z 由 test case TC-05 覆蓋。」
 
-In Claude Code / agents with repo access: use grep to search. In Codex / paste-based review: remind the reviewer to search manually.
+### AP-2: 信任 mock 等於信任 production
+
+- :x: 「vitest 全 PASS 所以邏輯正確」
+- :white_check_mark: 「vitest PASS 證明 code 跟 mock 一致。但需要驗證 mock 的值是否反映 production D1/KV 的實際格式（Case 1 教訓）。」
+
+### AP-3: 用文件驗證 code（因果反置）
+
+- :x: 「spec 說要檢查 active 欄位，所以 code 應該有」
+- :white_check_mark: 「spec 說要檢查 active 欄位。我搜尋了 `selectTop3` 函式，沒有找到 `active` 相關的 filter。這是 spec-code gap。」（Case 6 教訓）
+
+### AP-4: Log 存在 = 處理存在
+
+- :x: 「有 `console.warn('batch_id mismatch')` 所以有處理」
+- :white_check_mark: 「`console.warn` 在 L55，但 L56 繼續用 D1 結果回覆。沒有 if/else 分支走 fallback KV path。」（Case 4 教訓）
+
+### AP-5: 停在第一層就下結論
+
+- :x: 「`|| 'ACS'` 是 hardcoding 隱患」
+- :white_check_mark: 「`|| 'ACS'` 出現在 L30。往下追：caller 在 adapter.js:L88 已做 `row.model_type` → camelCase 映射。`|| 'ACS'` 是 defensive fallback，不是 hardcoding。」（Case 3 教訓）
+
+### AP-6: 平台假設不驗證
+
+- :x: 「KV.put 後下次讀取就是新值」
+- :white_check_mark: 「Cloudflare KV 是 eventually consistent。cacheTtl=86400 的 edge cache 不被 KV.put invalidate（LD-17 incident）。需要 versioned key prefix 或短 TTL 過渡。」（Case 5 教訓）
 
 ---
 
-## §7 Execution-Layer Audit (Release Gate mode only)
+## §4 判定等級定義
 
-| Layer | Action | Method | Catches |
-|:-----:|--------|--------|---------|
-| 1 | Static Check | **Execute** linter / grep / field scan / injection scan | Syntax + stale references |
-| 2 | Behavioral Check | **Execute** tests (targeted + full) / schema verification | Mock-layer correctness + schema alignment |
-| 3 | Code Review | **Read** changed files → compare against spec item by item | Spec-code gap |
-| 4 | Cross-Impact | **Execute** `git diff` + `grep` for unchanged files + stale references | Side effects + scope creep |
-| 5 | Test Quality | **Read** test files → compare against coverage gates | Test blind spots |
+| 等級 | 符號 | 定義 | 條件 |
+|------|------|------|------|
+| FAIL | :red_circle: | 確認有 Bug 或 spec-code gap | 有具體 code 行號 + 可重現場景 |
+| UNVERIFIED | :yellow_circle: | 無法確認正確性 | Q1~Q4 任一無法回答、或缺乏 production 驗證 |
+| PASS | :white_check_mark: | 確認正確 | Q1~Q4 全部有正面證據 + 反證場景排除 |
+| N/A | :black_medium_square: | 不適用 | 該 checklist 項目在此 context 不相關 |
 
-**Trust Calibration**: Embed 2 known bugs in the review prompt. If the reviewer doesn't find them independently → report credibility is discounted.
+**升降級規則**：
 
-**Hard Rule**: Layers 1-2 require **execution output evidence**, not "I read it and it looks fine."
+- :yellow_circle: 可以降級為 :red_circle:（找到具體反證）
+- :yellow_circle: 可以升級為 :white_check_mark:（補上 Q1~Q4 證據）
+- :white_check_mark: 不可以回到 :yellow_circle:（除非發現新反證）
+- 任何有 :red_circle: 的 review → 整體建議 NO-GO
 
 ---
 
-## §8 Output Template
+## §5 反證存活制（Self-Falsification）
+
+找到問題後，**花同等力氣嘗試推翻自己的 finding**：
+
+1. 對每個 :red_circle: finding，嘗試構造「其實沒問題」的論證
+2. 如果能成功推翻 → 降級為 :yellow_circle: 或移除
+3. 如果推翻不了 → 維持 :red_circle:，並記錄推翻嘗試作為額外證據
+4. 對每個 :white_check_mark:，問自己：「Case 1~9 的哪個模式可能在這裡重演？」
+
+**目的**：防止過度報告（找太多低價值 finding 湊數）和漏報（自我確認偏誤）。
+
+---
+
+## §6 同 Pattern 擴散搜尋
+
+修一個 bug 或找到一個問題時，問：
+
+1. **「還有哪裡有同樣的 pattern？」** — 同一個 adapter 的其他欄位？同一種 JOIN 的其他查詢？
+2. **「這個假設還在哪裡被使用？」** — 如果 mock 格式錯了，其他 test 的 mock 也可能錯
+3. **「這個 workaround 會影響誰？」** — 如果加了 `.toLowerCase()`，下游期待大寫的地方會壞嗎？
+
+有 repo / shell access 時：用 `rg` / `grep` 搜尋。只有貼文或受限審查時：明確列出建議搜尋指令，請 PM 或作者手動執行。
+
+---
+
+## §7 Execution-Layer Audit（5 層，Release Gate 或有 repo access 時使用）
+
+來源：Session_Closure_Report_20260322_v2.md — PM 升級後的 v2 Audit Prompt
+
+| Layer | 做什麼 | 方法 | 抓什麼 |
+|:-----:|--------|------|--------|
+| 1 | Static Check | **執行** eslint / grep / 特定欄位掃描 / SQL injection scan | 語法 + 殘留引用 |
+| 2 | Behavioral Check | **執行** vitest（targeted + 全量）/ D1 `PRAGMA` | mock 層正確性 + schema 對齊 |
+| 3 | Code Review | **讀取** 變更檔案 → 逐項比對 spec | spec-code gap |
+| 4 | 交叉影響 | **執行** `git diff` + `grep` 確認未改動檔案 + 殘留引用 | 副作用 + scope creep |
+| 5 | 測試品質 | **讀取** test 檔 → 比對 Gate 覆蓋率 | 測試盲區 |
+
+**PM 信任測試做法**：在 prompt 裡埋 2 個已知 Bug（如「BLACKLIST_KEYWORDS 沒改」+「INSERT 欄位映射錯」），看 reviewer agent（如 Codex）能不能獨立抓到。抓不到 → 報告可信度打折。
+
+**Hard Rule**：Layer 1~2 是「執行」不是「讀」— 必須有指令輸出證據，不是「我看了覺得沒問題」。
+
+---
+
+## §8 輸出格式模板
 
 ```markdown
 # Adversarial Code Review Report
 
 ## Meta
-- **Reviewer**: [identity]
-- **Target**: [PR# / file / spec document]
+- **Reviewer**: [Codex / Claude / ChatGPT / Human]
+- **Target**: [PR# / 檔案 / 規格書]
 - **Date**: YYYY-MM-DD
 - **Mode**: Code / Spec / Release Gate
-- **Intensity**: L1 Fast / L2 Standard / L3 Adversarial
-- **Overall**: 🔴 NO-GO / 🟡 CONDITIONAL-GO / ✅ GO
+- **Intensity**: L1 Fast (D0) / L2 Standard (D1) / L3 Adversarial (D2/D3)
+- **Overall Recommendation**: 🔴 NO-GO / 🟡 CONDITIONAL-GO / ✅ GO
 
 ## Findings
 
-### [F-01] [Title]
-- **Level**: 🔴 / 🟡 / ✅
-- **Location**: `file.js:L42-L55` / `spec §3.2`
-- **Description**: [specific issue]
-- **Q1 Positive Evidence**: [code line / test case]
-- **Q2 Falsification Scenario**: [what conditions cause failure]
-- **Q3 Data Validation**: [what data verified / arithmetic result]
-- **Q4 Path Execution**: [was fallback tested]
-- **Self-Falsification** (L3): [attempt to disprove this finding]
-- **Same Pattern** (L2+): [does this exist elsewhere]
-- **Suggested Fix**: [concrete action]
+### [F-01] [標題]
+- **等級**: 🔴 / 🟡 / ✅
+- **位置**: `file.js:L42-L55` / `spec §3.2`
+- **描述**: [具體問題]
+- **Q1 正面證據**: [code 行號 / test case]
+- **Q2 反證場景**: [什麼情境會出錯]
+- **Q3 資料驗證**: [用什麼資料驗證 / 手算結果]
+- **Q4 路徑行使**: [fallback 是否被測試]
+- **反證存活** (L3): [嘗試推翻此 finding 的結果]
+- **同 pattern** (L2+): [其他地方有無同樣問題]
+- **建議修復**: [具體方案]
+
+### [F-02] ...
 
 ## Checklist Summary
 
-### Code Mode
+### Code Mode（Code 審查時填）
 | Checklist | ✅ | 🔴 | 🟡 | ⬛ |
 |-----------|:--:|:--:|:--:|:--:|
-| CL-1 Database | | | | |
-| CL-2 Cache/Storage | | | | |
+| CL-1 SQL/D1 | | | | |
+| CL-2 KV/Storage | | | | |
 | CL-3 Data Semantics | | | | |
 | CL-4 Fallback/Error | | | | |
-| CL-5 Temporal/Cross-Phase | | | | |
+| CL-5 Cross-Phase | | | | |
 
-### Spec Mode
+### Spec Mode（Spec 審查時填）
 | Checklist | ✅ | 🔴 | 🟡 | ⬛ |
 |-----------|:--:|:--:|:--:|:--:|
-| CL-S1 Completeness | | | | |
-| CL-S2 Consistency | | | | |
-| CL-S3 Implementability | | | | |
-| CL-S4 Data Contract | | | | |
-| CL-S5 Security/Permissions | | | | |
+| CL-S1 需求完整性 | | | | |
+| CL-S2 內部一致性 | | | | |
+| CL-S3 可實作性 | | | | |
+| CL-S4 資料契約 | | | | |
+| CL-S5 安全/權限/狀態機 | | | | |
+| CL-S6 Code Quality Constraints | | | | |
 
-## Execution Evidence (Code Mode L2+ required)
+## Execution Evidence（Code Mode L2+ 必填）
 
-| # | Command / Action | Output Summary | Reviewer Conclusion |
-|---|-----------------|---------------|---------------------|
-| 1 | [e.g. `npm test -- --grep "batch"`] | [PASS/FAIL + key numbers] | [What this proves / doesn't prove] |
-| 2 | [e.g. `grep -rn 'ON CONFLICT' src/`] | [N matches listed] | [Matches production schema / doesn't] |
+| # | 指令 / 動作 | 輸出摘要 | Reviewer 結論 |
+|---|------------|---------|--------------|
+| 1 | [e.g. `npx vitest run src/features/combo.test.ts`] | [PASS/FAIL + 關鍵數字] | [證明什麼 / 不能證明什麼] |
+| 2 | [e.g. `grep -rn 'ON CONFLICT' src/`] | [找到 N 處，列出] | [跟 production schema 對齊 / 不對齊] |
+| 3 | [e.g. `wrangler d1 execute --remote "PRAGMA index_list('users')"`] | [constraint 名稱] | [跟 code 一致 / 不一致] |
 
-If execution is not possible (paste-based review), write: "N/A — recommend reviewer manually execute: [commands]"
+若無法執行（例如只有貼文、無 repo / shell access），填「N/A — 建議 PM 手動執行以下指令：[指令]」。
 
-## Trust Test (if applicable)
-- **Known Bug 1**: [Did PM embed a known bug? Was it found?]
-- **Known Bug 2**: [Same]
-- **Credibility rules**:
-  - 2/2 found → report credibility HIGH
-  - 1/2 found → report credibility MEDIUM, recommend second reviewer
-  - 0/2 found → report credibility LOW, report needs redo or owner review
+## PM 信任測試（如適用）
+- **已知 Bug 1**: [PM 是否埋了已知 bug？找到了嗎？]
+- **已知 Bug 2**: [同上]
+- **信任度判定規則**:
+  - 2/2 找到 → 報告可信度 HIGH
+  - 1/2 找到 → 報告可信度 MEDIUM，建議第二位 reviewer 補審
+  - 0/2 找到 → 報告可信度 LOW，整份報告需要重做或由 PM 親審
 
-## Deploy Verification (Release Gate mode)
-| Step | Command / Action | Expected Result |
-|------|-----------------|-----------------|
-| 1 | Deploy | [deploy command] |
-| 2 | Trigger test scenario | [which query / which data] |
-| 3 | Verify logs | [which log key, expected value] |
-| 4 | Cross-validate | [compare two independent paths] |
+## Deploy 驗證 Checklist（Release Gate mode）
 
-## Reviewer Honest Disclosure
-- **Not verified**: [honestly list]
-- **Assumptions made**: [list]
-- **Suggested next step**: [who needs to verify what, how]
+| Step | 指令 / 動作 | 預期結果 |
+|------|------------|---------|
+| 1 | Deploy | `wrangler deploy --env=...` |
+| 2 | 觸發測試場景 | [用什麼查詢 / 什麼資料] |
+| 3 | 驗證 log | [哪個 log key，預期什麼值] |
+| 4 | 交叉驗證 | [比較兩條獨立路徑，值必須一致] |
+
+## 對接 Boundary-First Close-Out（D1+ 時填）
+- **Decision level**: D0 / D1 / D2 / D3
+- **Owner**: [repo and layer]
+- **Consumer**: [repo or caller affected]
+- **Surfaces touched**: [contract / auth / schema / storage / permission]
+- **Executable spec**: [path or N/A]
+- **Locked artifacts checked**: [Scope / Decision Lock / CONTRACT / Evidence Block / UL Table / CQ / Rollback / Kill Switch]
+- **Rollback stance**: [rollback path, fallback, or blast-radius control]
+
+## Reviewer 誠實揭露
+- **沒有驗證的部分**: [誠實列出]
+- **做了哪些假設**: [列出]
+- **建議下一步**: [需要誰用什麼方式補驗證]
 ```
 
 ---
 
-## §9 Review Flow
+## §9 使用流程
 
+### L1 Fast（D0）
 ```
-1. Select Mode (Code / Spec / Release Gate)
-2. Select Intensity (L1 / L2 / L3)
-3. If L3: Read §0 calibration cases → calibrate review instinct
-4. Walk §2 checklist (Code or Spec, based on mode) → mark 🔴/🟡/✅/⬛
-5. If Code Mode (L2+): provide at least 1 execution evidence (test output / grep result / schema check / log evidence)
-6. Every 🟡 and ✅ → answer §1 four mandatory questions
-7. Every 🔴 → §5 self-falsification (L3) or confirm with evidence (L2)
-8. Every finding → §6 same-pattern expansion (L2+)
-9. Check against §3 six anti-patterns
-10. Output report using §8 template
-11. Honest disclosure of unverified items
+1. 回答 §1 Q1+Q2
+2. 檢查 §3 Anti-Pattern
+3. 輸出簡短判定
 ```
 
-**Hard Rules:**
-
-- Reviewer must not be the code author (Maker-Checker separation)
-- Any :red_circle: → overall NO-GO, cannot be overridden by "everything else passes"
-- PM may embed known bugs as trust test → if missed, entire report credibility is discounted
-- "No issues found" is not a valid review conclusion → must state "what I verified" and "what I did not verify"
-
----
-
-## Customization Guide
-
-### Adding Domain-Specific Calibration Cases
-
-Copy [references/calibration-cases.md](references/calibration-cases.md) and add your own cases following this template:
-
-```markdown
-### Case N: [Short Title]
-- **AI Said**: [What the AI reviewer claimed]
-- **Reality**: [What actually happened]
-- **Lesson**: [One-line principle extracted]
+### L2 Standard（D1）
+```
+1. 選擇模式（Code / Spec），若已有 boundary-first / executable spec，先讀上游 artifact
+2. 逐項走 §2 對應 Checklist → 標記 🔴/🟡/✅/⬛
+3. 若為 Code Mode：至少提供 1 項 execution evidence（test output / grep result / schema check / log evidence 其一）
+4. 每個 🟡 和 ✅ → 回答 §1 四問必答
+5. 每個 finding → §6 同 pattern 擴散搜尋
+6. 檢查是否觸犯 §3 六條 Anti-Pattern
+7. 用 §8 模板輸出報告
+8. 誠實揭露未驗證的部分
 ```
 
-The best calibration cases come from **real incidents where an AI reviewer was wrong**. Track your own and add them.
+### L3 Adversarial（D2/D3）
+```
+1. 選擇模式（Code / Spec / Release Gate），先讀 boundary-first 分類與 executable spec（若存在）
+2. 讀 §0 校準案例（9 個）→ 校準審查直覺
+3. 逐項走 §2 對應 Checklist → 標記 🔴/🟡/✅/⬛
+   - Release Gate: 跑兩套 Checklist（Code + Spec）
+4. 每個 🟡 和 ✅ → 回答 §1 四問必答
+5. 每個 🔴 → §5 反證存活制（嘗試推翻自己）
+6. 每個 finding → §6 同 pattern 擴散搜尋
+7. 檢查是否觸犯 §3 六條 Anti-Pattern
+8. Release Gate: 走 §7 五層審查
+9. 用 §8 模板輸出報告（含 Boundary-First Close-Out）
+10. 誠實揭露未驗證的部分
+```
 
-### Adding Domain-Specific Checklists
+**Hard Rule**：
 
-Add items to CL-1 through CL-5 (Code) or CL-S1 through CL-S5 (Spec) that reflect your stack's unique failure modes. Good checklist items:
-
-- Come from a real incident (not hypothetical)
-- Have a "typical error" column with a concrete example
-- Are mechanically checkable (not "is the code good?")
-
-### Mapping to Your Risk Classification
-
-If you have a severity system (D0-D3, P0-P4, etc.), map it to L1/L2/L3 intensity in the Mode Selection table.
+- 審查者不得同時是 code 作者（Maker-Checker 分離）
+- 任何 🔴 → 整體建議 NO-GO，不得以「其他都 PASS」覆蓋
+- PM 可能埋已知 Bug 做信任測試 → 如果已知 Bug 沒被找到，整份報告信度降級
+- 「沒有問題」不是合法的審查結論 → 至少要列出「我驗證了什麼」和「我沒驗證什麼」
+- D2/D3 的 review 報告必須包含 Boundary-First Close-Out 欄位
+- 上游 preflight / spec 若缺失，不得自行補假設當作已驗證事實

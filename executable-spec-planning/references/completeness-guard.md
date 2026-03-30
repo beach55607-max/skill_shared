@@ -1,122 +1,84 @@
-# Spec Completeness Guard
+# Spec Completeness Checklist (Guard — Layer A)
 
-> Run BEFORE sending to Checker. Binary PASS/FAIL. Any FAIL = revise.
-
----
-
-## Layer A: Manual Checklist (25 checks)
-
-### Structure (S) — 10 checks
-
-| # | Check | Verify | ⬜ |
-|---|-------|--------|:--:|
-| S-1 | In-Scope AND Out-of-Scope exist | Both sections present | |
-| S-2 | Negative List covers DB/Rollback/cross-team | ≥3 prohibition entries | |
-| S-3 | Decision Lock Table exists | D-1 or "Decision Lock" present | |
-| S-4 | Zero TBD in Decision Lock | No "TBD" / "?" in D-N cells | |
-| S-5 | ≥2 Phases | "Phase 0"/"Phase 1" present | |
-| S-6 | Each Phase has risk rating | 🟢/🟡/🔴 per Phase | |
-| S-7 | Each Phase has decidable gate | "Gate:" with number/command | |
-| S-8 | Rollback SOP with time budget | "< N min" per Phase | |
-| S-9 | Kill Switch exists | Mechanism described | |
-| S-10 | Governance Audit (7 items) | 7-row audit table | |
-
-### Content (C) — 5 checks
-
-| # | Check | Verify | ⬜ |
-|---|-------|--------|:--:|
-| C-1 | Acceptance criteria decidable | Each ⬜ has number/command/threshold | |
-| C-2 | No vague phrases | No "works correctly" / "acceptable" / "no regressions" | |
-| C-3 | Affected files with change types | Table: path + New/Modify/Delete | |
-| C-4 | Files NOT to modify list | Explicit prohibition list | |
-| C-5 | Architecture Fit Check recorded | Assumption + validation + result (new features) | |
-
-### CONTRACT (CT) — 6 checks (information output only)
-
-| # | Check | Verify | ⬜ |
-|---|-------|--------|:--:|
-| CT-1 | INPUT_CONTRACT with fields | Type/source/validation per field | |
-| CT-2 | MUST DO preconditions | Table with owner | |
-| CT-3 | OUTPUT_CONTRACT exists | Format + examples | |
-| CT-4 | APPROVAL_CHECKLIST | Gate items with PASS/FAIL | |
-| CT-5 | Full + minimal payload examples | Two examples | |
-| CT-6 | Degradation behavior | Missing-input handling | |
-
-### Risk (RK) — 4 checks
-
-| # | Check | Verify | ⬜ |
-|---|-------|--------|:--:|
-| RK-1 | Permission/security → risk ≥ 🟡 | Cross-ref affected files | |
-| RK-2 | DB mutations → human auth | Authorization text present | |
-| RK-3 | Fan-in > 5 → in Risks | Import count check | |
-| RK-4 | ≥ 3 risk entries | Count rows | |
-
-### Verdict
-
-All PASS → send to Checker. Any FAIL → fix, re-run.
+> **D0 tasks**: use `references/gate-quick-d0.md` instead of this checklist.
+> **D1+ tasks**: run this full checklist BEFORE sending spec to Checker. Every item is binary PASS/FAIL. Any FAIL = revise.
 
 ---
 
-## Layer B: Executable Guard Scripts
+## Structure Checks (S)
 
-Automates a subset of Layer A. Implement as shell/node scripts.
+| # | Check | How to Verify | Result |
+|---|-------|--------------|:------:|
+| S-1 | In-Scope AND Out-of-Scope sections exist | Grep for both | ⬜ |
+| S-2 | Negative List with DB/Rollback/cross-team entries | ≥3 prohibition entries | ⬜ |
+| S-3 | Decision Lock Table exists | Grep "D-1" or "Decision Lock" | ⬜ |
+| S-4 | Decision Lock has zero TBD entries | No "TBD" / "?" in D-N cells | ⬜ |
+| S-5 | Phase breakdown ≥2 phases | Grep "Phase 0"/"Phase 1" | ⬜ |
+| S-6 | Each Phase has risk rating | 🟢/🟡/🔴 per Phase | ⬜ |
+| S-7 | Each Phase has mechanically decidable gate | "Gate:" with number/command | ⬜ |
+| S-8 | Rollback SOP with time budget per Phase | "< N min" per Phase | ⬜ |
+| S-9 | Kill Switch exists | Mechanism described | ⬜ |
+| S-10 | Governance Audit (7 items) | 7-row audit table | ⬜ |
 
-### B-1: Decision Lock (covers S-3, S-4)
+## Content Quality (C)
 
-```bash
-grep -P "D-\d+" "$SPEC" | grep -iE "TBD|\?" && echo "FAIL" || echo "PASS"
-```
+| # | Check | How to Verify | Result |
+|---|-------|--------------|:------:|
+| C-1 | Acceptance criteria mechanically decidable | Each ⬜ has number/command/threshold | ⬜ |
+| C-2 | No vague phrases ("works correctly", "acceptable") | Scan for blocklist phrases | ⬜ |
+| C-3 | Affected files list with change types | Table of paths + New/Modify/Delete | ⬜ |
+| C-4 | Files NOT to modify list exists | Explicit prohibition list | ⬜ |
+| C-5 | Architecture Fit Check recorded (new features) | Core assumption + validation + result | ⬜ |
 
-### B-2: Criteria Decidability (covers C-1)
+## New Rule Checks (NR)
 
-```bash
-grep "⬜" "$SPEC" | while read -r line; do
-  echo "$line" | grep -qP "\d+|[<>=]+|grep|wc|exit|PASS|FAIL" || echo "FAIL: $line"
-done
-```
+| # | Check | How to Verify | Applicability | Result |
+|---|-------|--------------|---------------|:------:|
+| NR-1 | Evidence Block completed | Source code + real data + number sources all non-blank | All | ⬜ |
+| NR-2 | Data computation ACs use BDD Given-When-Then | Given/When/Then with concrete field values and numbers | Data computation ACs only | ⬜ |
+| NR-3 | Ubiquitous Language Table filled | Table or explicit N/A | Cross-system only | ⬜ |
 
-### B-3: Vague Language (covers C-2)
+## CONTRACT (CT) — if information output OR new data fields/sources
 
-```bash
-grep -iP "works correctly|is acceptable|no regressions|looks good" "$SPEC" \
-  && echo "FAIL" || echo "PASS"
-```
+| # | Check | How to Verify | Result |
+|---|-------|--------------|:------:|
+| CT-1 | INPUT_CONTRACT with field spec | Fields have type/source/validation | ⬜ |
+| CT-2 | MUST DO preconditions | Precondition table with owner | ⬜ |
+| CT-3 | OUTPUT_CONTRACT exists | Format + examples | ⬜ |
+| CT-4 | APPROVAL_CHECKLIST | Gate items with PASS/FAIL | ⬜ |
+| CT-5 | Full AND minimal payload examples | Two JSON examples | ⬜ |
+| CT-6 | Degradation behavior defined | Missing-input handling | ⬜ |
 
-### B-4: Section Existence (covers S-1, S-3, S-5, S-8, S-9, S-10)
+## Code Quality (CQ) — cross-module or new abstraction
 
-```bash
-for p in "In Scope" "Out of Scope" "Decision Lock" "Phase [01]" "Rollback" "Kill Switch" "Governance"; do
-  grep -qi "$p" "$SPEC" || echo "FAIL: missing $p"
-done
-```
+| # | Check | How to Verify | Result |
+|---|-------|--------------|:------:|
+| CQ-1 | Code Quality Constraints section exists | ≥ 1 CQ entry or explicit N/A | ⬜ |
+| CQ-2 | Mock/real-data boundary documented | CQ-4 filled or N/A | ⬜ |
 
-### B-5: CONTRACT Existence (covers CT-1, CT-3, CT-4)
+## Risk (RK)
 
-```bash
-for kw in INPUT_CONTRACT OUTPUT_CONTRACT APPROVAL_CHECKLIST; do
-  grep -qi "$kw" "$SPEC" "$DIR"/*.md 2>/dev/null || echo "FAIL: missing $kw"
-done
-```
-
-### B-6: Negative List (covers S-2)
-
-```bash
-grep -qiP "Negative List|Prohibition" "$SPEC" || echo "FAIL: no Negative List"
-```
-
-### B-7: File-Phase Cross-Reference (covers R12)
-
-```bash
-grep -oP '`[^`]+\.(js|ts|mjs)`' "$SPEC" | sort -u | while read -r f; do
-  grep -q "$f" <(sed -n '/Phase/,/^---/p' "$SPEC") || echo "WARN: $f not in Phase"
-done
-```
+| # | Check | How to Verify | Result |
+|---|-------|--------------|:------:|
+| RK-1 | Permission/security → risk ≥ 🟡 | Cross-ref affected files | ⬜ |
+| RK-2 | DB mutations → Final Authority authorization documented | Authorization text present | ⬜ |
+| RK-3 | Fan-in > 5 → noted in Risks | Import count check | ⬜ |
+| RK-5 | Bug fix includes regression gate or explicit exemption | Close-out has Regression Gate section, or states why + owner + remediation date | ⬜ |
+| RK-4 | Risks section ≥ 3 entries | Count rows | ⬜ |
 
 ---
 
-## Implementation Roadmap
+## Summary
 
-1. B-1, B-3, B-4 — pure grep, immediate value
-2. B-2, B-5, B-6 — pattern matching
-3. B-7 — needs markdown parsing
-4. Integrate as `guard-spec-completeness` in CI
+| Category | Total | PASS | FAIL |
+|----------|:-----:|:----:|:----:|
+| Structure (S) | 10 | | |
+| Content (C) | 5 | | |
+| CONTRACT (CT) | 6 or N/A | | |
+| Code Quality (CQ) | 2 or N/A | | |
+| Risk (RK) | 5 | | |
+| **Total** | **31** (or 23 if no CONTRACT + no CQ if no CONTRACT, or use gate-quick-d0.md for D0) | | |
+
+## Verdict
+
+All categories PASS? → **YES**: send to Checker. **NO**: fix FAIL items, re-run.
