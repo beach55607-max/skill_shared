@@ -110,6 +110,7 @@ Adversarial review consumes both: the boundary classification plus the executabl
 - If a shared contract changes and only one side was validated, the task is partial or blocked, not passed.
 - D2 and D3 work require maker-checker evidence or explicit user confirmation before close-out.
 - **Bug-to-Gate Closure.** Any confirmed and replayable bug must leave behind a regression gate. If no gate is feasible, close-out must record why, the temporary control, the owner, and the remediation date.
+- **SSOT-first.** Workflow governance files have a designated SSOT repository. Edit SSOT first, then copy to consuming repos. Never edit consuming repos first.
 
 For deeper guidance, read:
 

@@ -170,14 +170,21 @@ D0/D1 的低風險 Gate 可以由 Agent 自行通過，但必須：
 - **執行**: Architecture Fit Check（executable-spec-planning Step 3）
 - **D0 不再自動豁免**: D0 仍須提供一行聲明:「Architecture assumption: [X]. No new architecture needed because [Y].」
 - **D1+**: 完整 Architecture Fit Check artifact
+- **必檢（D1+ 全做，D0 至少回答資料層）**:
+  - [ ] Core assumption — 架構的核心假設是什麼？什麼情況下會失效？
+  - [ ] 資料層 — 資料從哪讀？會不會變？如果會變，hardcode 就違反 SSOT。
+  - [ ] 耦合度 — 改一筆資料需要幾步？如果 > 2 步（改 code → build → deploy），考慮從 API/DB 讀取。
+  - [ ] 資料量 — 資料量多大？前端/邊緣環境跑得動嗎？
 - **Gate 格式**:
   ```
   📋 GATE G1 Architecture Fit
   - Core assumption: [X]
   - Validation: [how confirmed]
-  - Data layer decision: [hardcode / database / key-value store / API — 帶理由]
+  - Data layer: [hardcode / database / key-value store / API — 帶理由]
+  - 資料會變嗎: [是 → 不可 hardcode / 否 → hardcode 可接受]
+  - 改一筆資料需要幾步: [N 步 — 如果 > 2 步需說明為什麼可接受]
 
-  🚦 PM REVIEW — APPROVED / REVISE / REJECT
+  🚦 stakeholder REVIEW — APPROVED / REVISE / REJECT
   ```
 
 #### G2: Spec Lock

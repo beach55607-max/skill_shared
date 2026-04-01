@@ -204,6 +204,7 @@ For new feature ideation, consider running two independent brainstorming paths (
 - **Do not auto-advance to the next stage.** After brainstorming, output the Gate format and wait for stakeholder APPROVED before proceeding to concept evaluation or engineering.
 - **Entry point is the stakeholder's decision.** The stakeholder may skip brainstorming ("concept is already decided, start from evaluation"). The agent does not decide the entry point.
 - **Endpoint must be declared.** The stakeholder may want only brainstorming without engineering ("just explore, don't build"). The agent must not auto-slide from ideation into implementation.
+- **Task type classification required.** Agent must state whether this is a product/feature task or pure creative writing to the stakeholder. Stakeholder confirms before proceeding. Agent must not self-classify to bypass governance gates.
 
 ### What the Gate Prevents
 
