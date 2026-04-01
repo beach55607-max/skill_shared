@@ -748,6 +748,11 @@ skill_shared/
 - Constitution 加入 phase transition + phase skipping hard rules
 - D0 Architecture Fit Check 從「可跳過」改為「需一行聲明」
 
+**閉環補強（結案審查後追加）:**
+- **G1 Hardcode 防線** — G1 Gate 新增必檢：「資料會變嗎？」「改一筆要幾步？」> 2 步 = 不可 hardcode
+- **CW 分類需 stakeholder ACK** — Agent 不可自行判定「這是純創作不用走 UGP」，需 stakeholder 確認
+- **SSOT-first Hard Rule** — 工作流治理檔案有指定的 SSOT repo，禁止先改副本再回填
+
 ### v2025.03.30 — Initial Release
 
 三套核心 skill：Boundary-First Engineering + Executable Spec Planning + Adversarial Code Review。
