@@ -222,6 +222,11 @@ You have a task
 ├─ Is it a trivial edit? (typo, comment, formatting)
 │  └─ Just do it. No skill needed. (D0)
 │
+├─ Is it a new feature or product? Direction not yet decided?
+│  └─ YES → Start with Brainstorming Capture
+│           Explore directions, get stakeholder alignment.
+│           If concept is already decided, skip to Boundary-First or Spec Planning.
+│
 ├─ Does it cross a repo, service, or contract boundary?
 │  └─ YES → Start with Boundary-First Engineering
 │           Identify owner, consumer, contract risk, rollback stance.
@@ -240,7 +245,8 @@ You have a task
 │
 └─ Multiple of the above?
    └─ Combine them. Typical full-cycle:
-      Boundary-First (decide) → Spec Planning (plan) → AI builds → Adversarial Review (verify)
+      Brainstorming (discover) → Boundary-First (decide) → Spec Planning (plan)
+      → AI builds → Adversarial Review (verify)
 ```
 
 ### Common Combinations
@@ -248,8 +254,10 @@ You have a task
 | Scenario | Skills to Use | Why |
 |----------|--------------|-----|
 | Small bug fix, single repo | Adversarial Review (L1 Fast) | Verify fix + confirm regression gate (HR-8) |
-| New feature, single repo | Spec Planning → Adversarial Review (L2) | Plan first, verify after |
+| New feature, direction undecided | Brainstorming → Spec Planning → Adversarial Review (L2) | Discover first, plan, verify |
+| New feature, direction decided | Spec Planning → Adversarial Review (L2) | Plan first, verify after |
 | Schema migration, multi-repo | Boundary-First → Spec Planning → Adversarial Review (L3) | Full lifecycle |
+| New product, multi-repo | Brainstorming → Boundary-First → Spec Planning → Adversarial Review (L3) | Full four-layer |
 | Reviewing someone else's PR | Adversarial Review (L2 Code Mode) | Verify with evidence |
 | Reviewing a design doc | Adversarial Review (L2 Spec Mode) | Check completeness and consistency |
 | Pre-deploy verification | Adversarial Review (L3 Release Gate) | Full execution-layer audit |
@@ -388,10 +396,23 @@ See [adversarial-code-review/README.md](adversarial-code-review/README.md) for d
 ## Capability Map
 
 ```text
++-- Brainstorming Capture (NEW v2025.04.01) --------------------+
+| Capture Layer      Minimal capture with source tagging         |
+|                    Preserve vagueness, multiple options coexist |
+|                    <AI> tags for suggestions, <hidden> for internal |
+| Gate Layer         Discovery Gate (G-1) for product/feature    |
+|                    Dual-path brainstorming (avoid blind spots)  |
+|                    Stakeholder checkpoint before engineering    |
++---------------------------------------------------------------+
+
 +-- Boundary-First Engineering ---------------------------------+
 | Decision Layer     D0-D3 severity classification              |
 |                    Implementation plan template                |
 |                    Maker-checker for D2/D3                     |
+| Gate Layer         Universal Gate Protocol (10 Gates, G-1~G6)  |  NEW
+|                    Proportionality principle (D0 fast / D3 full)|  NEW
+|                    Anti-hallucination (self-certify w/ evidence)|  NEW
+|                    Phase Registry in close-out (10 Gates)       |  NEW
 | Boundary Layer     Owner / consumer identification            |
 |                    Cross-boundary contract model               |
 |                    Conflict resolution                         |
@@ -403,7 +424,7 @@ See [adversarial-code-review/README.md](adversarial-code-review/README.md) for d
 +---------------------------------------------------------------+
 
 +-- Executable Spec Planning -----------------------------------+
-| Pre-Spec Layer     Architecture Fit Check                     |
+| Pre-Spec Layer     Architecture Fit Check (D0: one-line stmt)  |  UPDATED
 |                    Step 2b: Query Actual Data (anti-hallucin) |
 |                    Evidence Block (source + data + numbers)    |
 |                    D0 fast path with dedicated gate            |
@@ -416,8 +437,11 @@ See [adversarial-code-review/README.md](adversarial-code-review/README.md) for d
 |                    R1-R18 review dimensions (incl Bug-to-Gate) |
 | Guard Layer        31-check completeness (Layer A manual)      |
 |                    Layer B guard scripts (concept; not bundled)|
-| Close-out Layer    Governance audit (7 items)                  |
+|                    7 anti-patterns (incl AP-7 Phase Skip)      |  NEW
+| Close-out Layer    Governance audit (8 items, incl GA-8)       |  UPDATED
+|                    Phase Registry (10 Gates)                    |  NEW
 |                    Regression Gate section (HR-8)              |
+|                    HR-9 mandatory audit + HR-10 phase ACK       |  NEW
 |                    Before/After metrics + rejected paths       |
 +---------------------------------------------------------------+
 
@@ -435,9 +459,12 @@ See [adversarial-code-review/README.md](adversarial-code-review/README.md) for d
 |                    Q3 Boundary data (real data, not mock)      |
 |                    Q4 Path execution (was fallback exercised?) |
 | Spec Layer         CL-S1~S6 (incl Code Quality Constraints)   |
-| Guard Layer        6 anti-patterns (prohibited shortcuts)      |
+| Guard Layer        7 anti-patterns (prohibited shortcuts)      |  UPDATED
 |                    Self-falsification (disprove own findings)   |
 |                    Same-pattern expansion (grep for siblings)   |
+| Gate Layer         Phase Registry audit (missing = P0)         |  NEW
+|                    BLOCKED on missing preflight (not NO-GO)    |  NEW
+|                    Full Review pipeline (dual AI review)        |  NEW
 | Trust Layer        Final Authority can embed known bugs to test reviewer   |
 |                    Honest disclosure of unverified items        |
 +---------------------------------------------------------------+
