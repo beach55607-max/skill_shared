@@ -716,6 +716,32 @@ skill_shared/
 
 ---
 
+## Glossary（名詞解釋）
+
+| 縮寫 / 術語 | 全名 | 白話 |
+|------------|------|------|
+| **UGP** | Universal Gate Protocol（通用閘門協議） | 10 Gate 閉環：AI 做每一步都要 stakeholder 點頭，不能自己跑完全程 |
+| **Gate** | 閘門 | 一個 stakeholder checkpoint。AI 完成自檢後停下來，等 stakeholder 說 APPROVED 才能走下一步 |
+| **G-1 ~ G-3** | 發想階段 Gate | G-1 Discovery（發想）→ G-2 Concept Critique（評估）→ G-3 Canonicalize（定稿） |
+| **G0 ~ G6** | 工程階段 Gate | G0 分類 → G1 架構 → G2 規格鎖定 → G3 審查模式 → G4 實作 → G5 審查 → G6 結案 |
+| **D0 ~ D3** | Decision Level（風險等級） | D0 改 typo → D3 改權限/schema。越高越嚴格 |
+| **Phase Registry** | 閘門登記表 | Close-out 必填的 10 Gate 完整紀錄，每行有 status + evidence + stakeholder ACK |
+| **SELF_CERTIFIED** | 自證通過 | D0/D1 低風險 Gate，AI 附機械證據自己過，stakeholder 在 G6 統一審查 |
+| **WAIVED_BY_PM** | Stakeholder 授權跳過 | Gate 在入口之後被 stakeholder 明確授權跳過（跟 Agent 自己跳不同） |
+| **SKIPPED_BY_PM** | Stakeholder 指定不需要 | Gate 在入口之前，stakeholder 指定從後面開始 |
+| **BLOCKED** | 硬停 | Gate 過不了，需要修正或 stakeholder 決策 |
+| **HR** | Hard Rule | 違反 = spec rejected。目前 10 條（HR-1 ~ HR-10） |
+| **GA** | Governance Audit | Close-out 的 8 項治理稽核（GA-1 ~ GA-8） |
+| **AP** | Anti-Pattern | 已知的失敗模式。目前 7 個（AP-1 ~ AP-7） |
+| **SSOT** | Single Source of Truth | 唯一真相來源。spec 和治理檔案各有指定的 SSOT |
+| **Mode A / Mode B** | 審查模式 | Mode A = 雙 AI 審查。Mode B = 單 AI 審查（需 stakeholder 授權） |
+| **Evidence Block** | 證據區塊 | Spec 必附：讀了什麼 code、查了什麼真實資料、每個數字的出處 |
+| **CONTRACT triple** | 合約三件組 | INPUT CONTRACT + OUTPUT CONTRACT + APPROVAL CHECKLIST |
+| **BDD AC** | Given-When-Then 驗收標準 | 含具體欄位值和數值的可機械驗證驗收條件 |
+| **Final Authority** | 最終決策者 | 唯一能宣告 GO 的人（通常是 product owner 或 tech lead） |
+
+---
+
 ## Version History
 
 ### v2025.04.01 — Universal Gate Protocol + Brainstorming Capture
