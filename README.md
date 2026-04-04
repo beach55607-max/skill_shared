@@ -1,11 +1,11 @@
-# AI Engineering Skills
+# AI Dev Toolkit
 
 給 AI coding agent 用的工程治理 skill（Claude Code、Codex、ChatGPT 皆適用）。
 
 ## 三行安裝
 
 ```bash
-git clone https://github.com/beach55607-max/skill_shared && cd skill_shared
+git clone https://github.com/beach55607-max/ai-dev-toolkit && cd ai-dev-toolkit
 bash install.sh --target /path/to/your/project        # Claude Code
 bash install.sh --codex --target /path/to/your/project # Codex
 ```
@@ -539,8 +539,8 @@ A falsification-first code and spec review skill that forces AI reviewers to pro
 
 ```bash
 # Clone
-git clone https://github.com/beach55607-max/skill_shared
-cd skill_shared
+git clone https://github.com/beach55607-max/ai-dev-toolkit
+cd ai-dev-toolkit
 
 # 安裝全部到你的專案（Claude Code）
 bash install.sh --target /path/to/your/project
@@ -704,10 +704,16 @@ See [adversarial-code-review/examples/real-world-catches.md](adversarial-code-re
 
 ---
 
+## Related: MCP Memory Server
+
+If your AI agent also needs **persistent semantic memory** across sessions, check out [mcp-memory-server](https://github.com/beach55607-max/mcp-memory-server) -- a Cloudflare Workers-based MCP server for saving and searching knowledge by meaning. Works with all the same platforms (Claude, ChatGPT, Gemini CLI, Cursor, VS Code, etc.).
+
+---
+
 ## Repository Structure
 
 ```text
-skill_shared/
+ai-dev-toolkit/
 ├── README.md                                            <- You are here
 ├── cw-brainstorming/                                    <- Brainstorming capture (NEW v2025.04.01)
 │   └── SKILL.md
