@@ -100,7 +100,7 @@ Maker (主 AI)  ──寫 code/spec──→  Checker (獨立 AI)  ──找 bug
 
 > 場景：為 SaaS 平台建立「內部知識庫搜尋系統」。使用者可以用自然語言搜尋公司的政策文件、操作手冊、FAQ。涉及新 API endpoint、搜尋索引、和前端搜尋介面。從零開始，方向未定。
 
-### G-1: Discovery（Brainstorming Capture）
+### I1: Discovery（Brainstorming Capture）
 
 ```text
 Stakeholder: "我想讓員工可以用自然語言搜尋公司內部的文件，
@@ -108,7 +108,7 @@ Stakeholder: "我想讓員工可以用自然語言搜尋公司內部的文件，
 
 Agent 輸出：
 
-📋 GATE G-1 Discovery
+📋 GATE I1 Discovery
 - 功能方向:
   1. 全文搜尋（Elasticsearch / Meilisearch，keyword + fuzzy match）
   2. 語意搜尋（embedding + vector DB，理解「意思」不只是「字面」）
@@ -124,12 +124,12 @@ Agent 輸出：
 
 Stakeholder: **APPROVED**（選方向 3 混合式，需顯示段落摘要，第一版先不做權限控制）
 
-### G-2: Concept Critique（評估可行性）
+### I2: Concept Critique（評估可行性）
 
 ```text
 Agent 對選定方向做 5 項必檢：
 
-📋 GATE G-2 Concept Critique
+📋 GATE I2 Concept Critique
 - 業務合理性: PASS — 內部搜尋降低人工查找時間，ROI 明確
 - 功能完整性: BLOCKED — 缺「搜尋無結果」的處理（要顯示什麼？推薦相關分類？）
 - UX 合理性: BLOCKED — 如果搜尋延遲 > 3 秒，使用者會回去用舊的文件編號查找
@@ -144,14 +144,14 @@ Agent 對選定方向做 5 項必檢：
 
 Stakeholder: **REVISE**（加「無結果」引導、設定 2 秒 SLA、加權公式先用 keyword 70% + semantic 30%）
 
-Agent 修正後重新提交 G-2 → Stakeholder **APPROVED**
+Agent 修正後重新提交 I2 → Stakeholder **APPROVED**
 
-### G-3: Canonicalize（定稿）
+### I3: Canonicalize（定稿）
 
 ```text
-Agent 把 G-1 發想 + G-2 評估結果寫成 canonical spec：
+Agent 把 I1 發想 + I2 評估結果寫成 canonical spec：
 
-📋 GATE G-3 Canonicalize
+📋 GATE I3 Canonicalize
 - Canonical doc: knowledge-search-spec-v1.md
 - 資料來源: SharePoint 批次匯入 → 搜尋索引（不 hardcode 文件內容）
 - Scope In: 混合搜尋、段落摘要、無結果引導、2 秒 SLA
@@ -182,7 +182,7 @@ Stakeholder: **APPROVED D2**
 ```text
 📋 GATE G1 Architecture Fit
 - Core assumption: 混合搜尋（keyword + embedding），不需即時索引
-- Validation: G-2 確認批次匯入足夠（文件更新頻率低，每日同步）
+- Validation: I2 確認批次匯入足夠（文件更新頻率低，每日同步）
 - Data layer: 搜尋索引由 indexing pipeline 建立，不 hardcode
 
 🚦 Stakeholder REVIEW — APPROVED / REVISE
@@ -199,7 +199,7 @@ Spec v1 產出（節錄）：
   | 決策               | 選擇                     | 理由                    |
   |--------------------|-------------------------|------------------------|
   | 搜尋引擎            | Meilisearch + OpenAI    | 開源 + 可控成本          |
-  | 加權公式            | keyword 0.7 + semantic 0.3 | G-2 stakeholder 決定  |
+  | 加權公式            | keyword 0.7 + semantic 0.3 | I2 stakeholder 決定  |
   | 摘要長度            | 最多 200 字 highlight    | UX research 建議        |
 
 - 驗收標準（BDD）：
@@ -284,9 +284,9 @@ Phase 5: regression scan → 0 新問題
 ## Phase Registry
 | Gate | Phase | Status | Evidence | Stakeholder ACK |
 |------|-------|--------|----------|-----------------|
-| G-1 | Discovery | PASS | 3 directions explored | APPROVED |
-| G-2 | Concept Critique | PASS | 5/5 checked, 2 REVISED | APPROVED |
-| G-3 | Canonicalize | PASS | knowledge-search-spec-v1.md | APPROVED |
+| I1 | Discovery | PASS | 3 directions explored | APPROVED |
+| I2 | Concept Critique | PASS | 5/5 checked, 2 REVISED | APPROVED |
+| I3 | Canonicalize | PASS | knowledge-search-spec-v1.md | APPROVED |
 | G0 | Classify | PASS | D2 confirmed | APPROVED |
 | G1 | Arch Fit | PASS | hybrid search, batch index | APPROVED |
 | G2 | Spec Lock | PASS | spec-v1.2, 0 blockers | GO |
@@ -317,19 +317,19 @@ Residual risk: 多語言搜尋 (P2, deferred to v2)
 
 ```text
 真實案例：AI agent 在概念評估階段自行跳過，一句話就直接開始寫 code。結果：
-- 沒考慮「搜尋無結果」的 UX → 使用者看到空白頁就離開（G-2 功能完整性該攔住）
-- 搜尋延遲 5 秒但沒人測過 SLA → 使用者回去用舊系統（G-2 UX 合理性該攔住）
-- 加權公式隨意設定 → 精確查找反而排在後面（G-2 CHALLENGE 該挑戰的）
+- 沒考慮「搜尋無結果」的 UX → 使用者看到空白頁就離開（I2 功能完整性該攔住）
+- 搜尋延遲 5 秒但沒人測過 SLA → 使用者回去用舊系統（I2 UX 合理性該攔住）
+- 加權公式隨意設定 → 精確查找反而排在後面（I2 CHALLENGE 該挑戰的）
 - 7 輪 stakeholder 手動修正，其中 4 輪本應在概念評估就被發現
 
-UGP 的價值：stakeholder 在 G-2 花 10 分鐘 REVISE，省掉後面 2+ 小時的迭代。
+UGP 的價值：stakeholder 在 I2 花 10 分鐘 REVISE，省掉後面 2+ 小時的迭代。
 ```
 
 ---
 
 ## 這個 repo 有四套 skill
 
-**Skill 0: Brainstorming Capture (cw-brainstorming)** `v2025.04.01 NEW` — 讓 AI agent 在動手前先把方向想清楚。用最小紀錄捕捉發想，不過度展開、不混淆來源、不限制創意自由。產品/功能任務含 Discovery Gate (G-1)，stakeholder 確認方向後才能進入工程。
+**Skill 0: Brainstorming Capture (cw-brainstorming)** `v2025.04.01 NEW` — 讓 AI agent 在動手前先把方向想清楚。用最小紀錄捕捉發想，不過度展開、不混淆來源、不限制創意自由。產品/功能任務含 Discovery Gate (I1)，stakeholder 確認方向後才能進入工程。
 
 **Skill 1: Boundary-First Engineering** — 讓 AI agent 在改 code 之前，先把 owner、boundary、contract、rollback 想清楚。適合多 repo、跨服務、跨 runtime 的工程任務。
 
@@ -444,7 +444,7 @@ A brainstorming capture skill for creative and product ideation. Records ideas w
 
 - Minimal capture with source tagging (`<AI>` for AI suggestions, `<hidden>` for internal-only info)
 - Preserves vagueness — doesn't resolve contradictions or force premature decisions
-- Discovery Gate (G-1) for product/feature tasks — stakeholder checkpoint before engineering begins
+- Discovery Gate (I1) for product/feature tasks — stakeholder checkpoint before engineering begins
 - Dual-path brainstorming to avoid homogeneous blind spots
 - Composable with other skills (brainstorm → evaluate → spec → review)
 - Anti-pattern prevention: blocks AI from auto-sliding from ideation into implementation
@@ -583,7 +583,7 @@ See [adversarial-code-review/README.md](adversarial-code-review/README.md) for d
 | Capture Layer      Minimal capture with source tagging         |
 |                    Preserve vagueness, multiple options coexist |
 |                    <AI> tags for suggestions, <hidden> for internal |
-| Gate Layer         Discovery Gate (G-1) for product/feature    |
+| Gate Layer         Discovery Gate (I1) for product/feature    |
 |                    Dual-path brainstorming (avoid blind spots)  |
 |                    Stakeholder checkpoint before engineering    |
 +---------------------------------------------------------------+
@@ -592,7 +592,7 @@ See [adversarial-code-review/README.md](adversarial-code-review/README.md) for d
 | Decision Layer     D0-D3 severity classification              |
 |                    Implementation plan template                |
 |                    Maker-checker for D2/D3                     |
-| Gate Layer         Universal Gate Protocol (10 Gates, G-1~G6)  |  v04.01
+| Gate Layer         Universal Gate Protocol (10 Gates, I1~G6)  |  v04.01
 |                    Proportionality principle (D0 fast / D3 full)|  v04.01
 |                    Anti-hallucination (self-certify w/ evidence)|  v04.01
 |                    Phase Registry in close-out (10 Gates)       |  v04.01
@@ -794,7 +794,7 @@ ai-dev-toolkit/
 |------------|------|------|
 | **UGP** | Universal Gate Protocol（通用閘門協議） | 10 Gate 閉環：AI 做每一步都要 stakeholder 點頭，不能自己跑完全程 |
 | **Gate** | 閘門 | 一個 stakeholder checkpoint。AI 完成自檢後停下來，等 stakeholder 說 APPROVED 才能走下一步 |
-| **G-1 ~ G-3** | 發想階段 Gate | G-1 Discovery（發想）→ G-2 Concept Critique（評估）→ G-3 Canonicalize（定稿） |
+| **I1 ~ I3** | 發想階段 Gate | I1 Discovery（發想）→ I2 Concept Critique（評估）→ I3 Canonicalize（定稿） |
 | **G0 ~ G6** | 工程階段 Gate | G0 分類 → G1 架構 → G2 規格鎖定 → G3 審查模式 → G4 實作 → G5 審查 → G6 結案 |
 | **D0 ~ D3** | Decision Level（風險等級） | D0 改 typo → D3 改權限/schema。越高越嚴格 |
 | **Phase Registry** | 閘門登記表 | Close-out 必填的 10 Gate 完整紀錄，每行有 status + evidence + stakeholder ACK |
@@ -842,10 +842,10 @@ ai-dev-toolkit/
 基於一個真實案例的 900+ 則訊息審計：AI agent 在功能開發中自行跳過概念評估和設計審查階段，導致 7 輪 stakeholder 手動迭代（其中 4 輪本應被跳過的階段攔住）。根因：pipeline 是開環的 — agent 在每一步都可以選「對自己最快」的路，沒有機制要求它停下來讓 stakeholder 在成本最低的時候介入。
 
 **新增 Skill:**
-- **Brainstorming Capture (cw-brainstorming)** — 發想層 skill，含 Discovery Gate (G-1)，防止 AI 跳過發想直接動工
+- **Brainstorming Capture (cw-brainstorming)** — 發想層 skill，含 Discovery Gate (I1)，防止 AI 跳過發想直接動工
 
 **新增 Protocol:**
-- **Universal Gate Protocol (UGP)** — 10 Gate 閉環（G-1 Discovery → G6 Close-out），每步都有 stakeholder checkpoint
+- **Universal Gate Protocol (UGP)** — 10 Gate 閉環（I1 Discovery → G6 Close-out），每步都有 stakeholder checkpoint
 - **比例原則** — D0/D1 低風險 Gate 可自證（防幻覺），D2/D3 每步停等
 - **5 狀態制** — PASS / SELF_CERTIFIED(evidence) / BLOCKED / WAIVED_BY_PM(reason) / SKIPPED_BY_PM
 - **Phase Registry** — close-out 必填 10 Gate 完整紀錄，缺項 = rejected

@@ -54,14 +54,14 @@ D0 applies only when NONE of the "When to Use" triggers #1 (information output),
 
 ```
 Pre-Engineering Gates (entry point decided by stakeholder, see Universal Gate Protocol):
-  G-1: Discovery — brainstorming multi-direction ideas → PM APPROVED
-  G-2: Concept Critique — business/UX/completeness/technical/data evaluation → PM APPROVED
-  G-3: Canonicalize — finalize as canonical spec / SSOT → PM APPROVED
+  I1: Discovery — brainstorming multi-direction ideas → PM APPROVED
+  I2: Concept Critique — business/UX/completeness/technical/data evaluation → PM APPROVED
+  I3: Canonicalize — finalize as canonical spec / SSOT → PM APPROVED
 
 Engineering Gates (once entered, no skipping allowed):
 
 Step 1: Stakeholder gives requirement (fuzzy or structured)
-        If new feature → stakeholder decides entry point (typically G-1 or G-2)
+        If new feature → stakeholder decides entry point (typically I1 or I2)
          ↓
 Step 2: Read project context
         Cross-reference existing architecture
@@ -87,6 +87,11 @@ Step 4: Produce Spec v1
         Must include: Scope, Decision Lock, Phase breakdown, Gate, Rollback
         If information output OR new data fields/sources: add CONTRACT triple
         Run: references/completeness-guard.md
+        Run: references/structural-completeness-checklist.md (domain coverage — 24 checks, D1+)
+          → 12 generative: Maker must produce specific content from spec
+          → 12 verification: Maker cites evidence
+          → Both checklists PASS → send structural evidence with spec to Checker
+          → BLOCKED loop: if spec changes, affected generative answers must be re-filled (version ≥ spec version)
          ↓
 Step 4.5: Present Spec to PM (Final Authority) [Gate G2 — Spec Lock]
           → PM reviews scope, decision locks, architecture
@@ -301,4 +306,5 @@ Layer A is always available. Layer B automates a subset of Layer A checks. See m
 | `references/gate-quick-d0.md` | D0 gate guard (8 checks, replaces full checklist for D0) |
 | **Guards** | |
 | `references/completeness-guard.md` | AI-executable spec completeness rubric (31 checks; 23 if no CONTRACT/CQ) |
+| `references/structural-completeness-checklist.md` | Domain coverage guard (24 checks, 12 generative + 12 verification, D1+) |
 | `references/executable-guard-scripts.md` | *(not in public pack)* Automated guard script specs (Layer B) |

@@ -79,8 +79,10 @@
 | Decision | D-N | Spec §2 | {review method} | {sign-off note} | ⬜ HELD / PASS |
 | Regression Gate | RG-N | Close-out §9 | {verification command} | {evidence source} | ⬜ |
 | Phase Gate | G[N] | UGP | {PM ACK ref} | {Gate output artifact} | ⬜ PASS / WAIVED |
+| Structural | DC-N.N | Spec G2 | {Checker review} | {generative answers + Checker verdict} | ⬜ PASS / N/A(D0) |
 
-> Every AC, every Phase Gate, every locked decision, and every Regression Gate must have corresponding verification evidence. Blank row = unverified.
+> Every AC, every Phase Gate, every locked decision, every Regression Gate, and every Structural DC item must have corresponding verification evidence. Blank row = unverified.
+> Structural row: D0 = N/A. D1+ must list the 12 generative items' final verdict.
 
 ---
 
@@ -94,9 +96,9 @@
 
 | Gate | Phase | Status | Evidence | PM ACK |
 |------|-------|--------|----------|--------|
-| G-1 | Discovery | {PASS / SELF_CERTIFIED(evidence) / BLOCKED / SKIPPED_BY_PM / WAIVED_BY_PM(reason)} | {artifact} | {PM date + decision} |
-| G-2 | Concept Critique | {status} | {artifact} | {PM date + decision} |
-| G-3 | Canonicalize | {status} | {artifact} | {PM date + decision} |
+| I1 | Discovery | {PASS / SELF_CERTIFIED(evidence) / BLOCKED / SKIPPED_BY_PM / WAIVED_BY_PM(reason)} | {artifact} | {PM date + decision} |
+| I2 | Concept Critique | {status} | {artifact} | {PM date + decision} |
+| I3 | Canonicalize | {status} | {artifact} | {PM date + decision} |
 | G0 | Classify + Preflight | {status} | {artifact} | {PM date + decision} |
 | G1 | Architecture Fit | {status} | {artifact} | {PM date + decision} |
 | G2 | Spec Lock | {status} | {artifact} | {PM date + decision} |
@@ -111,16 +113,18 @@
 
 ## 12. Governance Audit
 
-| # | Principle | Status | Evidence |
-|---|-----------|:------:|---------|
-| GA-1 | Measurable | ⬜ | {numeric thresholds exist} |
-| GA-2 | Verifiable | ⬜ | {PASS/FAIL determinable by command} |
-| GA-3 | Auditable | ⬜ | {tests re-runnable} |
-| GA-4 | CONTRACT | ⬜ | {triple exists and reviewed} |
-| GA-5 | Rollback SOP | ⬜ | {steps per Phase with time budget} |
-| GA-6 | Kill Switch | ⬜ | {mechanism documented} |
-| GA-7 | Cost Cap | ⬜ | {resource bounds stated} |
-| GA-8 | Phase Compliance | ⬜ | {Phase Registry complete — all Gates have status + PM ACK, no blanks} |
+> **Generative Audit (v2)**: Each item requires specific content, not just a checkbox. Cannot produce content = FAIL.
+
+| # | Principle | Maker Must Answer | Evidence |
+|---|-----------|------------------|----------|
+| GA-1 | Measurable | **List each AC with its numeric threshold. No threshold = not delivered** | |
+| GA-2 | Verifiable | **List each AC's verification command + actual execution result** | |
+| GA-3 | Auditable | **List re-runnable tests/fixtures + commands. Can a third party reproduce in 5 minutes?** | |
+| GA-4 | CONTRACT | **List INPUT_CONTRACT fields + OUTPUT_CONTRACT format + Checker verdict. Or explain why N/A** | |
+| GA-5 | Rollback SOP | **List rollback steps per Phase + estimated time. Which paths were actually tested vs paper-only?** | |
+| GA-6 | Kill Switch | **Describe trigger mechanism + behavior + whether deploy is needed. Or explain why acceptable without one** | |
+| GA-7 | Cost Cap | **List resource consumption limits (API calls, DB rows, cache reads, etc.). What happens when exceeded?** | |
+| GA-8 | Phase Compliance | **List every Gate's status + which were skipped + PM authorization reference. Any blank = FAIL** | |
 
 ## 13. Sign-off
 

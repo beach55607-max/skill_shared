@@ -36,6 +36,7 @@ description: "Adversarial code review skill. Use whenever reviewing code, specs,
 
 - 若上游已有 `boundary-first-multi-repo-engineering` 輸出，**直接繼承** D0-D3、owner、consumer、surfaces touched、validation path；不要在 review 階段自己重造分類。
 - 若上游已有 `executable-spec-planning` spec，**把 spec 視為 SSOT**，至少核對：Scope/Non-Scope、Decision Lock、CONTRACT（如適用）、Evidence Block、Ubiquitous Language Table、Code Quality Constraints、Rollback / Kill Switch、Final Authority 邊界。
+- If upstream has a **Structural Completeness Checklist** (D1+), read the 12 generative answers as code review benchmarks. For each, verify the code actually implements what the Maker claimed to cover (auth actors, error scenarios, multi-store consistency, test coverage). Maker claimed but code didn't implement = P0 "spec-code gap".
 - 若上游 artifact 缺失或互相矛盾，**BLOCKED** — 不是 `NO-GO candidate`，是硬停。要求補 spec / 補 preflight，回報 PM 等待決策。**不得用 reviewer 自己的猜測補齊**。
 - 若 Phase Registry 顯示任何 Gate 被跳過且無 `WAIVED_BY_PM`，標記為 P0 finding：「Phase skip without PM authorization — violates UGP-2」。
 - Reviewer 的責任是提出 finding 與 recommendation。最終 GO / NO-GO 由 Final Authority 宣告。

@@ -14,7 +14,8 @@ Your role is **independent Checker** — you did NOT write this spec.
 
 1. `{spec path}`
 2. `{CONTRACT files if applicable}`
-3. `{relevant source files for cross-reference}`
+3. `{path to Maker's structural-completeness-checklist with evidence}` (D1+ mandatory)
+4. `{relevant source files for cross-reference}`
 
 ### Review Dimensions (R1-R18)
 
@@ -27,6 +28,23 @@ Your role is **independent Checker** — you did NOT write this spec.
 **Cross-Reference (R12-R17)**: File↔Phase, Gate↔acceptance, CONTRACT↔implementation, Rollback↔deploy order, Risk↔triggers, Test↔mock boundaries.
 
 **Bug-to-Gate (R18)**: If this is a bug fix, does the spec include a regression gate at the root-cause layer? If not, is an exemption documented?.
+
+### Structural Review (DC-1 ~ DC-6)
+
+In addition to the spec itself, you will receive the Maker's **Structural Completeness Checklist** with filled-in evidence. This checklist has 24 items across 6 domains. 12 items are **generative** — the Maker was required to produce specific content (actor lists, failure modes, test commands, etc.), not just check a box.
+
+For each generative item, evaluate:
+
+1. **Completeness**: Does the answer cover the full scope?
+2. **Specificity**: Does the answer contain concrete details (status codes, timeout values)?
+3. **Consistency with spec**: Does the answer match what's in the spec?
+4. **Missing domains**: Are there domains marked N/A that shouldn't be?
+
+For verification items, check whether the cited spec location supports the PASS claim.
+
+**Version alignment check**: If the spec is v(N) but structural evidence references earlier content, report as BLOCKER.
+
+Report structural findings in the same Findings table, with Location = "DC-N.N".
 
 ### Output Format
 

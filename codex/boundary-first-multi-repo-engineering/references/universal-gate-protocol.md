@@ -70,7 +70,7 @@ D0/D1 的低風險 Gate 可以由 Agent 自行通過，但必須：
 - Decision Lock: all locked
 
 ⚠️ 誠實揭露:
-- G-2 Concept Critique 時我沒有想到某些邊緣場景，是 stakeholder 後來補的
+- I2 Concept Critique 時我沒有想到某些邊緣場景，是 stakeholder 後來補的
 - 排序邏輯我選了「由貴到便宜」但沒有挑戰過業務合理性
 
 🚦 PM REVIEW — APPROVED / REVISE / REJECT
@@ -82,16 +82,16 @@ D0/D1 的低風險 Gate 可以由 Agent 自行通過，但必須：
 
 ## 10 Gate 定義
 
-### 發想階段（G-1 ~ G-3）
+### 發想階段（I1 ~ I3）
 
-#### G-1: Discovery（發想）
+#### I1: Discovery（發想）
 
 - **觸發**: 從零開始的新功能、新產品、新方向
 - **執行**: `cw-brainstorming` 視角 — 多選項並列，雙路互博（Claude + Codex 各提一組方向）
 - **產出**: 功能方向清單、多選項並列、開放問題
 - **Gate 格式**:
   ```
-  📋 GATE G-1 Discovery
+  📋 GATE I1 Discovery
   - 功能方向: [列出]
   - 雙路互博: Claude [N] 項 / Codex [N] 項（或 WAIVED_BY_PM）
   - 開放問題: [列出]
@@ -100,9 +100,9 @@ D0/D1 的低風險 Gate 可以由 Agent 自行通過，但必須：
   ```
 - **stakeholder 決策**: 選定方向、縮減範圍、或要求重新發想
 
-#### G-2: Concept Critique（概念評估）
+#### I2: Concept Critique（概念評估）
 
-- **觸發**: G-1 PASS 後自動進入，或 stakeholder 指定「概念已有，從 G-2 開始」
+- **觸發**: I1 PASS 後自動進入，或 stakeholder 指定「概念已有，從 I2 開始」
 - **執行**: `cw-story-critique` 視角 — 對選定方向做結構性挑戰
 - **必檢清單**:
   - [ ] 業務合理性 — 這個設計對業務端有沒有負面影響？
@@ -112,7 +112,7 @@ D0/D1 的低風險 Gate 可以由 Agent 自行通過，但必須：
   - [ ] 資料來源 — 資料從哪來？會不會變？該 hardcode 還是從 API 讀？
 - **Gate 格式**:
   ```
-  📋 GATE G-2 Concept Critique
+  📋 GATE I2 Concept Critique
   - 業務合理性: [PASS/BLOCKED + 理由]
   - 功能完整性: [PASS/BLOCKED + 理由]
   - UX 合理性: [PASS/BLOCKED + 理由]
@@ -124,24 +124,24 @@ D0/D1 的低風險 Gate 可以由 Agent 自行通過，但必須：
   🚦 PM REVIEW — APPROVED / REVISE / REJECT
   ```
 
-#### G-3: Canonicalize（定稿）
+#### I3: Canonicalize（定稿）
 
-- **觸發**: G-2 PASS 後自動進入，或 stakeholder 指定「已有完整 spec，從 G-3 開始」
+- **觸發**: I2 PASS 後自動進入，或 stakeholder 指定「已有完整 spec，從 I3 開始」
 - **執行**: `cw-official-docs` 視角 — 把發想和評估結果寫成 canonical spec / SSOT
 - **必含**:
   - 資料來源聲明（hardcode / database / key-value store / API / spreadsheet）
   - 功能範圍定稿（In-Scope / Out-of-Scope）
-  - 設計決策記錄（從 G-1/G-2 帶入）
+  - 設計決策記錄（從 I1/I2 帶入）
 - **Gate 格式**:
   ```
-  📋 GATE G-3 Canonicalize
+  📋 GATE I3 Canonicalize
   - Canonical doc: [檔案路徑或 artifact ID]
   - 資料來源: [宣告]
   - Scope: [In / Out 列表]
 
   🚦 PM REVIEW — APPROVED / REVISE / REJECT
   ```
-- **G-3 產出 = 工程 pipeline 的 input**
+- **I3 產出 = 工程 pipeline 的 input**
 
 ---
 
@@ -149,7 +149,7 @@ D0/D1 的低風險 Gate 可以由 Agent 自行通過，但必須：
 
 #### G0: Classify + Preflight
 
-- **觸發**: G-3 PASS 後自動進入，或 stakeholder 指定「純工程改動，從 G0 開始」
+- **觸發**: I3 PASS 後自動進入，或 stakeholder 指定「純工程改動，從 G0 開始」
 - **執行**: boundary-first decision-gate.md 分類（D0/D1/D2/D3）+ 8 步 Preflight
 - **關鍵**: Agent 提出 D-level + 證據，stakeholder 確認或 override
 - **Gate 格式**:
@@ -275,11 +275,11 @@ D0/D1 的低風險 Gate 可以由 Agent 自行通過，但必須：
 
 | 場景 | 入口 | 跳過的 Gate | stakeholder 怎麼說 |
 |------|------|------------|----------|
-| 從零開始做新功能 | **G-1** | 無 | 「從 G-1 開始」 |
-| stakeholder 已有概念，要評估 | **G-2** | G-1 | 「概念已定，從 G-2 開始」 |
-| stakeholder 已有完整 spec | **G0** | G-1~G-3 | 「spec 在 X，從 G0 開始」 |
-| 純 bug fix / 小改動 | **G0** | G-1~G-3 | 正常 D0 流程 |
-| stakeholder 只要發想不動工 | **G-1 → G-2 止** | G-3~G6 | 「只到 G-2，不進工程」 |
+| 從零開始做新功能 | **I1** | 無 | 「從 I1 開始」 |
+| stakeholder 已有概念，要評估 | **I2** | I1 | 「概念已定，從 I2 開始」 |
+| stakeholder 已有完整 spec | **G0** | I1~I3 | 「spec 在 X，從 G0 開始」 |
+| 純 bug fix / 小改動 | **G0** | I1~I3 | 正常 D0 流程 |
+| stakeholder 只要發想不動工 | **I1 → I2 止** | I3~G6 | 「只到 I2，不進工程」 |
 | stakeholder 只要 review 現有 code | **G5 單跑** | 全部 | 「只跑 adversarial review」 |
 
 **入口之前的 Gate**: 狀態為 `SKIPPED_BY_PM`（stakeholder 指定跳過，非 Agent 決定）。
@@ -300,9 +300,9 @@ D0/D1 的低風險 Gate 可以由 Agent 自行通過，但必須：
 
 | Gate | Phase | Status | Evidence | PM ACK |
 |------|-------|--------|----------|--------|
-| G-1 | Discovery | SKIPPED_BY_PM | stakeholder 指定從 G-2 開始 | PM YYYY-MM-DD |
-| G-2 | Concept Critique | PASS | 5/5 checks passed | PM YYYY-MM-DD APPROVED |
-| G-3 | Canonicalize | PASS | spec-v1.md | PM YYYY-MM-DD APPROVED |
+| I1 | Discovery | SKIPPED_BY_PM | stakeholder 指定從 I2 開始 | PM YYYY-MM-DD |
+| I2 | Concept Critique | PASS | 5/5 checks passed | PM YYYY-MM-DD APPROVED |
+| I3 | Canonicalize | PASS | spec-v1.md | PM YYYY-MM-DD APPROVED |
 | G0 | Classify + Preflight | PASS | D1 + evidence | PM YYYY-MM-DD APPROVED |
 | G1 | Architecture Fit | PASS | assumption confirmed | PM YYYY-MM-DD APPROVED |
 | G2 | Spec Lock | PASS | spec-v1.2 final | PM YYYY-MM-DD APPROVED |
@@ -344,7 +344,7 @@ D0/D1 的低風險 Gate 可以由 Agent 自行通過，但必須：
 | UGP-4 | **Review mode 只升不降。** D2/D3 強制 Mode A。D0/D1 的 Mode B 需 stakeholder ACK。降級需 WAIVED_BY_PM。 |
 | UGP-5 | **fail-closed。** Codex 不可用、preflight 缺失、artifact 缺鏈 → BLOCKED 回 stakeholder，不得靜默跳過或繼續。 |
 | UGP-6 | **Phase Registry 必填。** Close-out 必須包含完整的 10-Gate Phase Registry。缺項 = close-out rejected。 |
-| UGP-7 | **終點需宣告。** stakeholder 可指定只跑部分 Gate（如「只到 G-2」）。Agent 不得自動從發想滑進工程。 |
+| UGP-7 | **終點需宣告。** stakeholder 可指定只跑部分 Gate（如「只到 I2」）。Agent 不得自動從發想滑進工程。 |
 
 ---
 
@@ -372,13 +372,13 @@ stakeholder 回覆 `DENIED` 後，Agent 必須正常執行該 Gate。
 |---------|---------|
 | boundary-first decision-gate.md | G0 的執行內容 |
 | boundary-first constitution.md | UGP rules 補充 constitution Hard Rules |
-| executable-spec-planning Core Flow | Steps 1-8 對應 G0-G6，前接 G-1~G-3 |
+| executable-spec-planning Core Flow | Steps 1-8 對應 G0-G6，前接 I1~I3 |
 | adversarial-code-review | G5 的執行內容 |
 | full-review / adversarial-review | G5 的執行命令 |
 | close-out-template.md | G6 的執行內容，加入 Phase Registry |
-| cw-brainstorming | G-1 的執行內容 |
-| cw-story-critique | G-2 的執行內容 |
-| cw-official-docs | G-3 的執行內容 |
+| cw-brainstorming | I1 的執行內容 |
+| cw-story-critique | I2 的執行內容 |
+| cw-official-docs | I3 的執行內容 |
 
 ---
 

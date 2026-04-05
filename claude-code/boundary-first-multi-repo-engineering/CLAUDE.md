@@ -18,9 +18,9 @@ If local rules conflict with this workflow, follow local rules and explain the c
 
 ```text
  Pre-Engineering (entry point decided by PM, earlier stages may be skipped)
- G-1. Discover     → Multi-direction brainstorming
- G-2. Critique     → Concept evaluation: business/UX/completeness/technical/data
- G-3. Canonicalize → Finalize as canonical spec / SSOT
+ I1. Discover     → Multi-direction brainstorming
+ I2. Critique     → Concept evaluation: business/UX/completeness/technical/data
+ I3. Canonicalize → Finalize as canonical spec / SSOT
 
  Engineering (once entered, no skipping allowed)
  0. Classify    → What kind of change is this?             [G0]
@@ -52,7 +52,7 @@ Before preflight, classify the change severity. Read `references/decision-gate.m
 
 For trivial edits with no protected surface (typo fixes, comment updates, formatting), D0 preflight is sufficient. D0 still requires Step 2b (read source + query actual data), Evidence Block, and Architecture Fit Check one-line statement. Do not over-apply ceremony to changes that carry no boundary, contract, or security risk.
 
-**New features / new products**: If the task involves new feature development, it must start from G-1 Discovery or G-2 Concept Critique (entry point decided by PM). Do not skip the pre-engineering phase and jump directly into engineering. See Universal Gate Protocol reference.
+**New features / new products**: If the task involves new feature development, it must start from I1 Discovery or I2 Concept Critique (entry point decided by PM). Do not skip the pre-engineering phase and jump directly into engineering. See Universal Gate Protocol reference.
 
 **No source guessing.** If source files, local rules, or nearest tests were not read, do not assume implementation details.
 
@@ -145,7 +145,7 @@ If a stop-condition surface was touched and executable verification is unavailab
 
 ## References
 
-- `references/universal-gate-protocol.md` -- **Universal Gate Protocol: 10-Gate closed loop (G-1 to G6)**
+- `references/universal-gate-protocol.md` -- **Universal Gate Protocol: 10-Gate closed loop (I1 to G6)**
 - `references/decision-gate.md` -- D0-D3 severity classification
 - `references/implementation-plan-template.md` -- required plan format for D1/D2/D3
 - `references/constitution.md` -- authority order and protected surfaces (SSOT)

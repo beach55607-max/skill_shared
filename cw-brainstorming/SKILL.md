@@ -1,6 +1,6 @@
 ---
 name: cw-brainstorming
-description: "Brainstorming capture skill for creative and product ideation. Use when the user is exploring ideas — story directions, feature concepts, product designs, character arcs, or any open-ended exploration. Creates minimal working notes that preserve creative freedom by recording only what was stated and marking sources. For product/feature tasks, includes a structured Discovery Gate (G-1) to ensure stakeholder alignment before proceeding."
+description: "Brainstorming capture skill for creative and product ideation. Use when the user is exploring ideas — story directions, feature concepts, product designs, character arcs, or any open-ended exploration. Creates minimal working notes that preserve creative freedom by recording only what was stated and marking sources. For product/feature tasks, includes a structured Discovery Gate (I1) to ensure stakeholder alignment before proceeding."
 ---
 
 # Brainstorming Capture
@@ -174,7 +174,7 @@ Notes should feel skeletal and incomplete. That's the point - preserves creative
 
 ---
 
-## Discovery Gate (G-1) — For Product/Feature Tasks
+## Discovery Gate (I1) — For Product/Feature Tasks
 
 When this skill is used for **product or feature ideation** (not pure creative writing), output a structured Discovery Gate after brainstorming to ensure stakeholder alignment before proceeding.
 
@@ -185,7 +185,27 @@ Without a gate, AI agents tend to jump from brainstorming directly into implemen
 ### Gate Format
 
 ```
-GATE G-1 Discovery
+GATE I1 Discovery
+
+── Generative Verification (must produce specific content, cannot produce = Gate blocked) ──
+
+IV-1 Exploration breadth:
+  List ≥3 directions explored, each with:
+  - Core assumption
+  - What evidence could disprove it
+  - Why selected / rejected
+
+IV-2 Core definition:
+  - Define the non-negotiable core in one sentence
+  - Acceptance criteria (mechanically decidable, no vague descriptions)
+  - If the core is impossible, does the product still have standalone value? (yes = wrong core)
+
+IV-3 Alternative differentiation:
+  - List ≥2 existing alternatives
+  - Specific difference from each alternative
+  - Why users would choose this over alternatives
+
+── Basic fields ──
 - Directions explored: [list the options considered]
 - Recommended direction: [which one and why]
 - Dual-path brainstorm: Agent A [N] ideas / Agent B [N] ideas (or single-path with justification)

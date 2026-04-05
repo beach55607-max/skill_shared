@@ -73,7 +73,7 @@ Treat repeated no-match cases as a signal to create a new adapter later, not as 
 
 ## Universal Gate Protocol (UGP)
 
-Read [universal-gate-protocol.md](./references/universal-gate-protocol.md) for the full 10-Gate closed-loop governance system (G-1 Discovery → G6 Close-out).
+Read [universal-gate-protocol.md](./references/universal-gate-protocol.md) for the full 10-Gate closed-loop governance system (I1 Discovery → G6 Close-out).
 
 Key rules for Codex:
 

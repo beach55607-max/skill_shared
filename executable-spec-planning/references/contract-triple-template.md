@@ -58,7 +58,7 @@
 
 | # | Gate Item | PASS Condition | Priority | Status |
 |---|----------|---------------|:--------:|:------:|
-| G-1 | {check} | {decidable condition} | 🔴 MUST | ⬜ |
-| G-2 | {check} | {condition} | 🟡 SHOULD | ⬜ |
+| I1 | {check} | {decidable condition} | 🔴 MUST | ⬜ |
+| I2 | {check} | {condition} | 🟡 SHOULD | ⬜ |
 
 **Gate**: All 🔴 MUST = PASS → proceed. Any 🔴 FAIL → stop.
