@@ -6,6 +6,7 @@
 #   bash install.sh --list             # 列出可安裝的 skill
 #   bash install.sh --skill 1 3        # 只裝 Boundary-First + Adversarial Review
 #   bash install.sh --target /my/proj  # 指定專案目錄
+#   bash install.sh --profile strict-harness --target /my/proj
 #   bash install.sh --uninstall        # 移除已安裝的 skill
 
 set -euo pipefail
@@ -14,6 +15,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET_DIR="."
 AGENT="claude"  # claude or codex
+PROFILE=""
+DRY_RUN=false
 
 # --- Skill definitions ---
 # Format: "id:source_dir:target_name:description"
@@ -33,6 +36,74 @@ CODEX_SKILLS=(
   "4:usp-brainstorm:usp-brainstorm:USP Brainstorm"
 )
 
+run_or_print() {
+  if [[ "$DRY_RUN" == true ]]; then
+    printf '  DRY-RUN:'
+    printf ' %q' "$@"
+    printf '\n'
+  else
+    "$@"
+  fi
+}
+
+install_strict_harness() {
+  local profile_src="$SCRIPT_DIR/harness/strict-harness"
+  local install_root="$TARGET_DIR/.ai-dev"
+  local runtime_dir="$install_root/runtime"
+  local artifacts_dir="$install_root/gate-artifacts"
+  local bin_dir="$install_root/bin"
+  local harness_dir="$install_root/harness/strict-harness"
+  local launcher="$bin_dir/ai-harness"
+
+  if [[ ! -d "$profile_src" ]]; then
+    echo "strict-harness profile source not found: $profile_src" >&2
+    exit 1
+  fi
+
+  if [[ "$UNINSTALL" == true ]]; then
+    echo "Uninstalling strict-harness from $install_root ..."
+    if [[ -e "$launcher" ]]; then
+      run_or_print rm -f "$launcher"
+    else
+      echo "  - ai-harness launcher (not installed)"
+    fi
+    if [[ -d "$harness_dir" ]]; then
+      run_or_print rm -rf "$harness_dir"
+    else
+      echo "  - strict-harness profile (not installed)"
+    fi
+    echo "Runtime data is left in place: $runtime_dir and $artifacts_dir"
+    echo "Done."
+    exit 0
+  fi
+
+  echo "Installing strict-harness profile to $install_root ..."
+  echo ""
+
+  run_or_print mkdir -p "$runtime_dir" "$artifacts_dir" "$bin_dir" "$(dirname "$harness_dir")"
+
+  if [[ -d "$harness_dir" ]]; then
+    run_or_print rm -rf "$harness_dir"
+  fi
+
+  run_or_print cp -r "$profile_src" "$harness_dir"
+  run_or_print cp "$profile_src/bin/ai-harness.sh" "$launcher"
+  run_or_print chmod +x "$launcher"
+
+  echo ""
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "Dry-run complete. No files were changed."
+  else
+    echo "Installed strict-harness profile."
+  fi
+  echo "Runtime:   $runtime_dir"
+  echo "Artifacts: $artifacts_dir"
+  echo "Command:   $launcher"
+  echo ""
+  echo "Add $bin_dir to PATH or run: $launcher smoke"
+  exit 0
+}
+
 # --- Parse args ---
 SELECTED_IDS=()
 UNINSTALL=false
@@ -47,6 +118,14 @@ while [[ $# -gt 0 ]]; do
     --target)
       TARGET_DIR="$2"
       shift 2
+      ;;
+    --profile)
+      PROFILE="$2"
+      shift 2
+      ;;
+    --dry-run)
+      DRY_RUN=true
+      shift
       ;;
     --skill)
       shift
@@ -70,6 +149,8 @@ while [[ $# -gt 0 ]]; do
       echo "  --codex            Install to .codex/skills/ (default: .claude/skills/)"
       echo "  --target <dir>     Target project directory (default: current directory)"
       echo "  --skill <id...>    Install specific skills by ID (e.g., --skill 1 3)"
+      echo "  --profile <name>   Install an optional workflow profile (strict-harness)"
+      echo "  --dry-run          Print planned filesystem actions without changing files"
       echo "  --list             List available skills"
       echo "  --uninstall        Remove installed skills"
       echo "  --help             Show this help"
@@ -79,6 +160,7 @@ while [[ $# -gt 0 ]]; do
       echo "  bash install.sh --codex             # Install all to .codex/skills/"
       echo "  bash install.sh --skill 1 3         # Install Boundary-First + Adversarial Review"
       echo "  bash install.sh --target ~/myproj   # Install to specific project"
+      echo "  bash install.sh --profile strict-harness --target ~/myproj"
       exit 0
       ;;
     *)
@@ -87,6 +169,19 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -n "$PROFILE" ]]; then
+  if [[ "$PROFILE" == "strict-harness" ]]; then
+    if [[ ${#SELECTED_IDS[@]} -gt 0 ]]; then
+      echo "--profile strict-harness cannot be combined with --skill." >&2
+      exit 1
+    fi
+    install_strict_harness
+  fi
+
+  echo "Unknown profile: $PROFILE. Available profiles: strict-harness" >&2
+  exit 1
+fi
 
 # --- Select skill set ---
 if [[ "$AGENT" == "codex" ]]; then
@@ -130,13 +225,21 @@ if [[ "$UNINSTALL" == true ]]; then
   for entry in "${SKILL_SET[@]}"; do
     IFS=':' read -r id src name desc <<< "$entry"
     if [[ -d "$INSTALL_DIR/$name" ]]; then
-      rm -rf "$INSTALL_DIR/$name"
-      echo "  ✓ Removed $name"
+      run_or_print rm -rf "$INSTALL_DIR/$name"
+      if [[ "$DRY_RUN" == true ]]; then
+        echo "  - Would remove $name"
+      else
+        echo "  ✓ Removed $name"
+      fi
     else
       echo "  - $name (not installed)"
     fi
   done
-  echo "Done."
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "Dry-run complete. No files were changed."
+  else
+    echo "Done."
+  fi
   exit 0
 fi
 
@@ -144,7 +247,7 @@ fi
 echo "Installing ${#SKILL_SET[@]} skill(s) to $INSTALL_DIR ..."
 echo ""
 
-mkdir -p "$INSTALL_DIR"
+run_or_print mkdir -p "$INSTALL_DIR"
 
 INSTALLED=0
 for entry in "${SKILL_SET[@]}"; do
@@ -158,19 +261,29 @@ for entry in "${SKILL_SET[@]}"; do
 
   # Remove old version if exists
   if [[ -d "$INSTALL_DIR/$name" ]]; then
-    rm -rf "$INSTALL_DIR/$name"
+    run_or_print rm -rf "$INSTALL_DIR/$name"
   fi
 
-  cp -r "$SRC_PATH" "$INSTALL_DIR/$name"
-  echo "  ✓ $name"
+  run_or_print cp -r "$SRC_PATH" "$INSTALL_DIR/$name"
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "  - Would install $name"
+  else
+    echo "  ✓ $name"
+  fi
   INSTALLED=$((INSTALLED + 1))
 done
 
 echo ""
-echo "Installed $INSTALLED skill(s) to $INSTALL_DIR"
+if [[ "$DRY_RUN" == true ]]; then
+  echo "Dry-run complete. $INSTALLED skill(s) would be installed to $INSTALL_DIR"
+else
+  echo "Installed $INSTALLED skill(s) to $INSTALL_DIR"
+fi
 
 # --- Post-install notes ---
-if [[ "$AGENT" == "codex" ]]; then
+if [[ "$DRY_RUN" == true ]]; then
+  :
+elif [[ "$AGENT" == "codex" ]]; then
   echo ""
   echo "Note: Restart Codex to pick up new skills."
 elif [[ "$AGENT" == "claude" ]]; then
