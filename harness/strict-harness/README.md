@@ -13,6 +13,14 @@ smoke output in predictable locations.
 bash install.sh --profile strict-harness --target /path/to/project
 ```
 
+If the runtime should live at a workspace root while the actual code lives in a
+nested git repo, bind the review repo explicitly:
+
+```bash
+bash install.sh --profile strict-harness --target /path/to/workspace --repo service
+bash install.sh --profile strict-harness --hooks --target /path/to/workspace --repo service
+```
+
 This creates:
 
 ```text
@@ -35,9 +43,13 @@ Add `.ai-dev/bin` to `PATH`, or run the launcher by full path:
 
 ## v1 Scope
 
-This public profile provides a single-repo strict workflow:
+This public profile provides a strict workflow for one review repo per command.
+By default the review repo is the target project. For nested repos, pass
+`--repo <path>` so git SHA, diffs, staged files, and hooks are bound to the
+actual child repo while `.ai-dev/` remains under the target workspace.
 
 - project-local runtime and artifact directories
+- nested repo custody through `--repo`
 - `ai-harness smoke`
 - `ai-harness run`
 - `ai-harness g4-start`
@@ -136,6 +148,9 @@ Install the optional repo-local pre-commit hook:
 .ai-dev/bin/ai-harness install-hooks
 ```
 
+For a nested review repo, add `--repo service` to `run`, `g4-start`,
+`g4-close`, `g5-package`, `full-review`, and `install-hooks`.
+
 The hook checks staged files before commit:
 
 - there must be a latest `CLOSED` / `PASS` G4 packet
@@ -165,4 +180,4 @@ This public profile does not depend on any private workspace:
 - no external memory service requirement
 - no private runtime directory
 - no global block board
-- no nested-repo custody rules in v1
+- no multi-repo fan-out orchestration in v1; bind one review repo per command

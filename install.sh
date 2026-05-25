@@ -7,7 +7,7 @@
 #   bash install.sh --skill 1 3        # 只裝 Boundary-First + Adversarial Review
 #   bash install.sh --target /my/proj  # 指定專案目錄
 #   bash install.sh --profile strict-harness --target /my/proj
-#   bash install.sh --profile strict-harness --hooks --target /my/proj
+#   bash install.sh --profile strict-harness --hooks --target /my/proj [--repo path/to/repo]
 #   bash install.sh --uninstall        # 移除已安裝的 skill
 
 set -euo pipefail
@@ -20,6 +20,7 @@ PROFILE=""
 DRY_RUN=false
 INSTALL_HOOKS=false
 FORCE_HOOKS=false
+REVIEW_REPO=""
 
 # --- Skill definitions ---
 # Format: "id:source_dir:target_name:description"
@@ -46,6 +47,29 @@ run_or_print() {
     printf '\n'
   else
     "$@"
+  fi
+}
+
+is_absolute_path() {
+  case "$1" in
+    /*|[A-Za-z]:*|//*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+target_abs_dir() {
+  cd "$TARGET_DIR" && pwd
+}
+
+resolve_review_repo() {
+  local target_abs repo_value
+  target_abs="$(target_abs_dir)"
+  repo_value="${REVIEW_REPO:-$target_abs}"
+
+  if is_absolute_path "$repo_value"; then
+    cd "$repo_value" && pwd
+  else
+    cd "$target_abs/$repo_value" && pwd
   fi
 }
 
@@ -84,12 +108,19 @@ exclude_strict_harness_runtime() {
 
 install_strict_harness() {
   local profile_src="$SCRIPT_DIR/harness/strict-harness"
-  local install_root="$TARGET_DIR/.ai-dev"
+  local target_abs install_root
+  target_abs="$(target_abs_dir)"
+  install_root="$target_abs/.ai-dev"
   local runtime_dir="$install_root/runtime"
   local artifacts_dir="$install_root/gate-artifacts"
   local bin_dir="$install_root/bin"
   local harness_dir="$install_root/harness/strict-harness"
   local launcher="$bin_dir/ai-harness"
+  local review_repo_abs="$target_abs"
+
+  if [[ -n "$REVIEW_REPO" ]]; then
+    review_repo_abs="$(resolve_review_repo)"
+  fi
 
   if [[ ! -d "$profile_src" ]]; then
     echo "strict-harness profile source not found: $profile_src" >&2
@@ -123,21 +154,36 @@ install_strict_harness() {
   fi
 
   run_or_print cp -r "$profile_src" "$harness_dir"
-  run_or_print cp "$profile_src/bin/ai-harness.sh" "$launcher"
-  run_or_print chmod +x "$launcher"
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "  DRY-RUN: write launcher shim $launcher"
+    run_or_print chmod +x "$launcher"
+  else
+    cat > "$launcher" <<LAUNCHER
+#!/usr/bin/env bash
+# ai-dev-toolkit strict-harness launcher
+set -euo pipefail
+
+export AI_DEV_PROJECT_ROOT="\${AI_DEV_PROJECT_ROOT:-$target_abs}"
+export AI_DEV_DIR="\${AI_DEV_DIR:-$install_root}"
+export AI_DEV_REVIEW_REPO="\${AI_DEV_REVIEW_REPO:-$review_repo_abs}"
+
+exec "$harness_dir/bin/ai-harness.sh" "\$@"
+LAUNCHER
+    chmod +x "$launcher"
+  fi
   exclude_strict_harness_runtime
 
   if [[ "$INSTALL_HOOKS" == true ]]; then
     if [[ "$DRY_RUN" == true ]]; then
       if [[ "$FORCE_HOOKS" == true ]]; then
-        run_or_print env AI_DEV_PROJECT_ROOT="$TARGET_DIR" AI_DEV_DIR="$install_root" "$launcher" install-hooks --force
+        run_or_print env AI_DEV_PROJECT_ROOT="$target_abs" AI_DEV_DIR="$install_root" AI_DEV_REVIEW_REPO="$review_repo_abs" "$launcher" install-hooks --repo "$review_repo_abs" --force
       else
-        run_or_print env AI_DEV_PROJECT_ROOT="$TARGET_DIR" AI_DEV_DIR="$install_root" "$launcher" install-hooks
+        run_or_print env AI_DEV_PROJECT_ROOT="$target_abs" AI_DEV_DIR="$install_root" AI_DEV_REVIEW_REPO="$review_repo_abs" "$launcher" install-hooks --repo "$review_repo_abs"
       fi
     elif [[ "$FORCE_HOOKS" == true ]]; then
-      AI_DEV_PROJECT_ROOT="$TARGET_DIR" AI_DEV_DIR="$install_root" "$launcher" install-hooks --force
+      AI_DEV_PROJECT_ROOT="$target_abs" AI_DEV_DIR="$install_root" AI_DEV_REVIEW_REPO="$review_repo_abs" "$launcher" install-hooks --repo "$review_repo_abs" --force
     else
-      AI_DEV_PROJECT_ROOT="$TARGET_DIR" AI_DEV_DIR="$install_root" "$launcher" install-hooks
+      AI_DEV_PROJECT_ROOT="$target_abs" AI_DEV_DIR="$install_root" AI_DEV_REVIEW_REPO="$review_repo_abs" "$launcher" install-hooks --repo "$review_repo_abs"
     fi
   fi
 
@@ -150,6 +196,7 @@ install_strict_harness() {
   echo "Runtime:   $runtime_dir"
   echo "Artifacts: $artifacts_dir"
   echo "Command:   $launcher"
+  echo "Review repo: $review_repo_abs"
   echo ""
   echo "Add $bin_dir to PATH or run: $launcher smoke"
   exit 0
@@ -172,6 +219,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --profile)
       PROFILE="$2"
+      shift 2
+      ;;
+    --repo)
+      REVIEW_REPO="$2"
       shift 2
       ;;
     --dry-run)
@@ -209,6 +260,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --target <dir>     Target project directory (default: current directory)"
       echo "  --skill <id...>    Install specific skills by ID (e.g., --skill 1 3)"
       echo "  --profile <name>   Install an optional workflow profile (strict-harness)"
+      echo "  --repo <dir>       Review git repo for strict-harness hooks (default: target)"
       echo "  --dry-run          Print planned filesystem actions without changing files"
       echo "  --hooks            Install strict-harness repo-local git hooks"
       echo "  --force-hooks      Replace an existing unmanaged git hook when used with --hooks"
@@ -223,6 +275,7 @@ while [[ $# -gt 0 ]]; do
       echo "  bash install.sh --target ~/myproj   # Install to specific project"
       echo "  bash install.sh --profile strict-harness --target ~/myproj"
       echo "  bash install.sh --profile strict-harness --hooks --target ~/myproj"
+      echo "  bash install.sh --profile strict-harness --hooks --target ~/workspace --repo service"
       exit 0
       ;;
     *)
@@ -247,6 +300,11 @@ fi
 
 if [[ "$INSTALL_HOOKS" == true || "$FORCE_HOOKS" == true ]]; then
   echo "--hooks and --force-hooks require --profile strict-harness." >&2
+  exit 1
+fi
+
+if [[ -n "$REVIEW_REPO" ]]; then
+  echo "--repo requires --profile strict-harness." >&2
   exit 1
 fi
 

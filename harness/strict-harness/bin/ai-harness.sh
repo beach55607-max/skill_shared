@@ -2,6 +2,7 @@
 set -euo pipefail
 
 VERSION="strict-harness v1"
+REVIEW_REPO_OVERRIDE="${AI_DEV_REVIEW_REPO:-}"
 
 usage() {
   cat <<'USAGE'
@@ -11,10 +12,11 @@ Usage:
   ai-harness help
   ai-harness init
   ai-harness smoke
-  ai-harness install-hooks [--force]
-  ai-harness hook pre-commit
+  ai-harness install-hooks [--repo path/to/repo] [--force]
+  ai-harness hook pre-commit [--repo path/to/repo]
 
   ai-harness run \
+    [--repo path/to/repo] \
     --objective "..." \
     --allowed path[,path] \
     --forbidden "..." \
@@ -23,6 +25,7 @@ Usage:
     --command "implementation command"
 
   ai-harness g4-start \
+    [--repo path/to/repo] \
     --objective "..." \
     --allowed path[,path] \
     --forbidden "..." \
@@ -32,18 +35,20 @@ Usage:
   ai-harness g4-status --packet <packet-id-or-path>
 
   ai-harness g4-close \
+    [--repo path/to/repo] \
     --packet <packet-id-or-path> \
     --return-status DONE \
     --verification-status PASS \
     --verification-evidence path/to/evidence.log
 
-  ai-harness g5-package --base <sha> --head <sha> [--scope path[,path]]
+  ai-harness g5-package [--repo path/to/repo] --base <sha> --head <sha> [--scope path[,path]]
   ai-harness g5-review --package <review-package> [--cmd "reviewer command {package}"]
-  ai-harness full-review --base <sha> --head <sha> [--scope path[,path]] [--cmd "..."]
+  ai-harness full-review [--repo path/to/repo] --base <sha> --head <sha> [--scope path[,path]] [--cmd "..."]
 
 Environment:
   AI_DEV_PROJECT_ROOT   Project root. Defaults to git top-level or current directory.
   AI_DEV_DIR            Runtime root. Defaults to <project>/.ai-dev.
+  AI_DEV_REVIEW_REPO    Git repo whose diff/staged files are reviewed. Defaults to project root.
   AI_REVIEWER_CMD       Command used by g5-review. Use {package} as placeholder.
   AI_HARNESS_SKIP       Set to 1 to bypass local hooks with an explicit reason.
 USAGE
@@ -147,6 +152,62 @@ project_root() {
   pwd
 }
 
+is_absolute_path() {
+  case "$1" in
+    /*|[A-Za-z]:*|//*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+set_review_repo_override() {
+  REVIEW_REPO_OVERRIDE="$1"
+}
+
+review_repo_root() {
+  local project target resolved
+  project="$(project_root)"
+  target="${REVIEW_REPO_OVERRIDE:-$project}"
+
+  if is_absolute_path "$target"; then
+    resolved="$target"
+  else
+    resolved="$project/$target"
+  fi
+
+  if ! resolved="$(cd "$resolved" 2>/dev/null && pwd)"; then
+    die "review repo not found: $target"
+  fi
+  printf '%s\n' "$resolved"
+}
+
+review_repo_relpath() {
+  local project review
+  project="$(project_root)"
+  review="$(review_repo_root)"
+
+  if [[ "$review" == "$project" ]]; then
+    printf '.\n'
+    return
+  fi
+
+  case "$review" in
+    "$project"/*) printf '%s\n' "${review#"$project"/}" ;;
+    *) printf '%s\n' "$review" ;;
+  esac
+}
+
+maybe_set_review_repo_from_packet() {
+  local packet="$1"
+  local packet_review_root
+  if [[ -n "${REVIEW_REPO_OVERRIDE:-}" ]]; then
+    return
+  fi
+  packet_review_root="$(packet_value "$packet" review_repo_root || true)"
+  if [[ -n "$packet_review_root" ]]; then
+    set_review_repo_override "$packet_review_root"
+  fi
+}
+
 ai_dev_dir() {
   local root
   root="$(project_root)"
@@ -187,13 +248,13 @@ ensure_dirs() {
 
 require_git_repo() {
   local root
-  root="$(project_root)"
-  git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "project root is not a git repository: $root"
+  root="$(review_repo_root)"
+  git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "review repo is not a git repository: $root"
 }
 
 git_head_sha() {
   local root
-  root="$(project_root)"
+  root="$(review_repo_root)"
   git -C "$root" rev-parse HEAD
 }
 
@@ -287,10 +348,17 @@ cmd_init() {
 
 cmd_install_hooks() {
   local force=false
-  local root hook_path launcher_rel launcher_abs
+  local repo=""
+  local project root hook_path launcher_abs ai_dir
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      --repo)
+        require_arg_value "$1" "${2:-}"
+        repo="$2"
+        set_review_repo_override "$repo"
+        shift 2
+        ;;
       --force)
         force=true
         shift
@@ -303,10 +371,15 @@ cmd_install_hooks() {
 
   require_git_repo
   ensure_dirs
-  root="$(project_root)"
-  hook_path="$root/.git/hooks/pre-commit"
-  launcher_rel=".ai-dev/bin/ai-harness"
-  launcher_abs="$(ai_dev_dir)/bin/ai-harness"
+  project="$(project_root)"
+  root="$(review_repo_root)"
+  hook_path="$(git -C "$root" rev-parse --git-path hooks/pre-commit)"
+  case "$hook_path" in
+    /*|[A-Za-z]:*|//*) ;;
+    *) hook_path="$root/$hook_path" ;;
+  esac
+  ai_dir="$(ai_dev_dir)"
+  launcher_abs="$ai_dir/bin/ai-harness"
 
   if [[ ! -x "$launcher_abs" ]]; then
     die "ai-harness launcher is missing or not executable: $launcher_abs"
@@ -318,6 +391,7 @@ cmd_install_hooks() {
     fi
   fi
 
+  mkdir -p "$(dirname "$hook_path")"
   cat > "$hook_path" <<HOOK
 #!/usr/bin/env bash
 # ai-dev-toolkit strict-harness managed hook
@@ -328,22 +402,37 @@ if [[ "\${AI_HARNESS_SKIP:-}" == "1" ]]; then
   exit 0
 fi
 
-exec "$launcher_rel" hook pre-commit
+exec env AI_DEV_PROJECT_ROOT="$project" AI_DEV_DIR="$ai_dir" AI_DEV_REVIEW_REPO="$root" "$launcher_abs" hook pre-commit
 HOOK
   chmod +x "$hook_path"
   echo "Installed strict-harness pre-commit hook: $hook_path"
 }
 
 cmd_hook_pre_commit() {
+  local repo=""
   local root packet_dir packet latest=""
   local -a staged_files=()
   local -a allowed_files=()
   local file
   local covered=0
 
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo)
+        require_arg_value "$1" "${2:-}"
+        repo="$2"
+        set_review_repo_override "$repo"
+        shift 2
+        ;;
+      *)
+        die "unknown hook pre-commit option: $1"
+        ;;
+    esac
+  done
+
   require_git_repo
   ensure_dirs
-  root="$(project_root)"
+  root="$(review_repo_root)"
   packet_dir="$(g4_packet_dir)"
 
   while IFS= read -r file; do
@@ -409,12 +498,19 @@ cmd_g4_start() {
   local verify_cmd=""
   local id=""
   local output=""
+  local repo=""
   local -a allowed_files=()
   local -a forbidden_scope=()
   local -a stop_conditions=()
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      --repo)
+        require_arg_value "$1" "${2:-}"
+        repo="$2"
+        set_review_repo_override "$repo"
+        shift 2
+        ;;
       --objective)
         require_arg_value "$1" "${2:-}"
         objective="$2"
@@ -482,6 +578,8 @@ cmd_g4_start() {
     echo "packet_id: $id"
     echo "created_at_utc: $(timestamp_utc)"
     echo "project_root: $(project_root)"
+    echo "review_repo: $(review_repo_relpath)"
+    echo "review_repo_root: $(review_repo_root)"
     echo "base_sha: $(git_head_sha)"
     echo "status: OPEN"
     echo "objective: $objective"
@@ -526,11 +624,12 @@ cmd_g4_status() {
   [[ -n "$packet" ]] || die "g4-status requires --packet"
   packet="$(packet_path_from_id "$packet")"
   validate_packet_file "$packet"
-  grep -E '^(packet_id|created_at_utc|base_sha|status|objective|verification_command|return_status|verification_status|closed_at_utc): ' "$packet" || true
+  grep -E '^(packet_id|created_at_utc|review_repo|base_sha|status|objective|verification_command|return_status|verification_status|closed_at_utc): ' "$packet" || true
 }
 
 cmd_g4_close() {
   local packet=""
+  local repo=""
   local return_status=""
   local verification_status=""
   local verification_evidence=""
@@ -538,6 +637,12 @@ cmd_g4_close() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      --repo)
+        require_arg_value "$1" "${2:-}"
+        repo="$2"
+        set_review_repo_override "$repo"
+        shift 2
+        ;;
       --packet)
         require_arg_value "$1" "${2:-}"
         packet="$2"
@@ -572,6 +677,7 @@ cmd_g4_close() {
 
   packet_file="$(packet_path_from_id "$packet")"
   validate_packet_file "$packet_file"
+  maybe_set_review_repo_from_packet "$packet_file"
   grep -q '^status: OPEN$' "$packet_file" || die "packet is not OPEN: $packet_file"
 
   if [[ "$return_status" == "DONE" && "$verification_status" != "PASS" ]]; then
@@ -616,6 +722,8 @@ cmd_run() {
   local run_cmd=""
   local id=""
   local packet=""
+  local repo=""
+  local review_root
   local evidence_dir run_log verify_log summary_log
   local run_exit verify_exit close_status verification_status
   local -a allowed_files=()
@@ -624,6 +732,12 @@ cmd_run() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      --repo)
+        require_arg_value "$1" "${2:-}"
+        repo="$2"
+        set_review_repo_override "$repo"
+        shift 2
+        ;;
       --objective)
         require_arg_value "$1" "${2:-}"
         objective="$2"
@@ -679,6 +793,7 @@ cmd_run() {
 
   require_git_repo
   ensure_dirs
+  review_root="$(review_repo_root)"
 
   if [[ -z "$id" ]]; then
     id="run-$(timestamp_utc)-$$"
@@ -706,12 +821,15 @@ cmd_run() {
     echo "run_id: $id"
     echo "packet: $packet"
     echo "started_at_utc: $(timestamp_utc)"
+    echo "project_root: $(project_root)"
+    echo "review_repo: $(review_repo_relpath)"
+    echo "review_repo_root: $review_root"
     echo "command: $run_cmd"
     echo "verification_command: $verify_cmd"
   } > "$summary_log"
 
   set +e
-  bash -lc "cd \"$(project_root)\" && $run_cmd" > "$run_log" 2>&1
+  bash -lc "cd \"$review_root\" && $run_cmd" > "$run_log" 2>&1
   run_exit=$?
   set -e
 
@@ -723,7 +841,7 @@ cmd_run() {
 
   if [[ "$run_exit" -eq 0 ]]; then
     set +e
-    bash -lc "cd \"$(project_root)\" && $verify_cmd" > "$verify_log" 2>&1
+    bash -lc "cd \"$review_root\" && $verify_cmd" > "$verify_log" 2>&1
     verify_exit=$?
     set -e
   else
@@ -790,6 +908,7 @@ cmd_g5_package() {
   local base=""
   local head="HEAD"
   local output=""
+  local repo=""
   local root
   local base_sha head_sha
   local -a scope_files=()
@@ -799,6 +918,12 @@ cmd_g5_package() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      --repo)
+        require_arg_value "$1" "${2:-}"
+        repo="$2"
+        set_review_repo_override "$repo"
+        shift 2
+        ;;
       --base)
         require_arg_value "$1" "${2:-}"
         base="$2"
@@ -827,7 +952,7 @@ cmd_g5_package() {
 
   require_git_repo
   ensure_dirs
-  root="$(project_root)"
+  root="$(review_repo_root)"
 
   if [[ -z "$base" ]]; then
     if git -C "$root" rev-parse --verify "HEAD~1^{commit}" >/dev/null 2>&1; then
@@ -884,7 +1009,9 @@ cmd_g5_package() {
     echo
     echo "review_package_version: 1"
     echo "created_at_utc: $(timestamp_utc)"
-    echo "project_root: $root"
+    echo "project_root: $(project_root)"
+    echo "review_repo: $(review_repo_relpath)"
+    echo "review_repo_root: $root"
     echo "BASE_SHA: $base_sha"
     echo "HEAD_SHA: $head_sha"
     echo "full_diff_hash: $full_diff_hash"
@@ -1028,11 +1155,18 @@ cmd_full_review() {
   local head="HEAD"
   local reviewer_cmd="${AI_REVIEWER_CMD:-}"
   local package=""
+  local repo=""
   local -a scope_files=()
   local -a package_args=()
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      --repo)
+        require_arg_value "$1" "${2:-}"
+        repo="$2"
+        set_review_repo_override "$repo"
+        shift 2
+        ;;
       --base)
         require_arg_value "$1" "${2:-}"
         base="$2"
@@ -1092,6 +1226,7 @@ expect_exit() {
 
 cmd_smoke() {
   local dir home failed tmp root self base head package evidence
+  local nested_workspace nested_repo nested_base nested_head nested_package nested_evidence nested_packet nested_hook
   dir="$(ai_dev_dir)"
   home="$(harness_home)"
   failed=0
@@ -1243,6 +1378,70 @@ cmd_smoke() {
     --scope app.txt \
     --cmd "printf 'PASS\n'" >/dev/null
   echo "PASS full-review packages diff and normalizes reviewer verdict"
+
+  nested_workspace="$tmp/workspace"
+  nested_repo="$nested_workspace/service"
+  mkdir -p "$nested_repo"
+  git -C "$nested_repo" init -q
+  git -C "$nested_repo" config user.email "ai-harness-smoke@example.invalid"
+  git -C "$nested_repo" config user.name "AI Harness Smoke"
+  echo "nested alpha" > "$nested_repo/app.txt"
+  git -C "$nested_repo" add app.txt
+  git -C "$nested_repo" commit -q -m "nested base"
+  nested_base="$(git -C "$nested_repo" rev-parse HEAD)"
+  echo "nested beta" >> "$nested_repo/app.txt"
+  git -C "$nested_repo" add app.txt
+  git -C "$nested_repo" commit -q -m "nested change"
+  nested_head="$(git -C "$nested_repo" rev-parse HEAD)"
+
+  AI_DEV_PROJECT_ROOT="$nested_workspace" AI_DEV_DIR="$nested_workspace/.ai-dev" bash "$self" init >/dev/null
+  nested_package="$(
+    AI_DEV_PROJECT_ROOT="$nested_workspace" AI_DEV_DIR="$nested_workspace/.ai-dev" bash "$self" g5-package \
+      --repo service \
+      --base "$nested_base" \
+      --head "$nested_head" \
+      --scope app.txt
+  )"
+  grep -q '^review_repo: service$' "$nested_package" || { echo "FAIL nested review package did not bind review_repo"; failed=1; }
+  grep -q '^+nested beta$' "$nested_package" || { echo "FAIL nested review package did not use nested repo diff"; failed=1; }
+  case "$nested_package" in
+    "$nested_workspace/.ai-dev/gate-artifacts/review-packages/"*) echo "PASS nested review repo keeps artifacts in workspace runtime" ;;
+    *) echo "FAIL nested review package escaped workspace runtime: $nested_package"; failed=1 ;;
+  esac
+  echo "PASS nested review repo uses child repo diff"
+
+  mkdir -p "$nested_workspace/.ai-dev/bin"
+  cp "$self" "$nested_workspace/.ai-dev/bin/ai-harness"
+  chmod +x "$nested_workspace/.ai-dev/bin/ai-harness"
+  AI_DEV_PROJECT_ROOT="$nested_workspace" AI_DEV_DIR="$nested_workspace/.ai-dev" bash "$self" install-hooks --repo service --force >/dev/null
+  nested_hook="$(git -C "$nested_repo" rev-parse --git-path hooks/pre-commit)"
+  case "$nested_hook" in
+    /*|[A-Za-z]:*|//*) ;;
+    *) nested_hook="$nested_repo/$nested_hook" ;;
+  esac
+  [[ -x "$nested_hook" ]] || { echo "FAIL nested review repo hook was not installed"; failed=1; }
+  nested_evidence="$nested_workspace/nested-verify.log"
+  echo "nested verification ok" > "$nested_evidence"
+  nested_packet="$(
+    AI_DEV_PROJECT_ROOT="$nested_workspace" AI_DEV_DIR="$nested_workspace/.ai-dev" bash "$self" g4-start \
+      --repo service \
+      --id nested-smoke-packet \
+      --objective "nested repo smoke task" \
+      --allowed app.txt \
+      --forbidden "anything outside app.txt" \
+      --verify "cat ../nested-verify.log" \
+      --stop "unexpected scope"
+  )"
+  AI_DEV_PROJECT_ROOT="$nested_workspace" AI_DEV_DIR="$nested_workspace/.ai-dev" bash "$self" g4-close \
+    --packet "$nested_packet" \
+    --return-status DONE \
+    --verification-status PASS \
+    --verification-evidence "$nested_evidence" >/dev/null
+  echo "nested gamma" >> "$nested_repo/app.txt"
+  git -C "$nested_repo" add app.txt
+  (cd "$nested_repo" && "$nested_hook") >/dev/null
+  git -C "$nested_repo" reset -q HEAD app.txt
+  echo "PASS nested review repo hook checks child repo staged files"
 
   rm -rf "$tmp"
 

@@ -40,11 +40,12 @@ bash install.sh --profile strict-harness --target /path/to/your/project # option
 `strict-harness` 是給需要更高強度防線的團隊使用，不是預設輕量 workflow。它會在目標專案建立 `.ai-dev/`，放置 runtime、gate artifacts、launcher 與模板，讓 AI 任務可以逐步沉澱成可檢查的 packet、review evidence、regression smoke。
 Installer 會把 `.ai-dev/` 加到目標 repo 的 local `.git/info/exclude`，避免 runtime artifacts 變成要提交的檔案。
 
-公開 v1 profile 提供單 repo strict workflow：
+公開 v1 profile 提供「每次綁一個 review repo」的 strict workflow：
 
 - `.ai-dev/runtime/`
 - `.ai-dev/gate-artifacts/`
 - `.ai-dev/bin/ai-harness`
+- nested repo custody：用 `--repo <path>` 指定真正被審的 git repo
 - `ai-harness run` wrapper
 - G4 packet start/status/close
 - G5 review evidence package
@@ -58,6 +59,10 @@ G4 packet 欄位缺失、G5 diff 空包、base/head 相同、reviewer 不可用�
 ```bash
 bash install.sh --profile strict-harness --target /path/to/your/project
 /path/to/your/project/.ai-dev/bin/ai-harness smoke
+
+# workspace 裝 runtime，但 code 在 nested repo 時：
+bash install.sh --profile strict-harness --target /path/to/workspace --repo service
+bash install.sh --profile strict-harness --hooks --target /path/to/workspace --repo service
 
 /path/to/your/project/.ai-dev/bin/ai-harness run \
   --objective "fix login retry bug" \
@@ -88,6 +93,9 @@ AI_REVIEWER_CMD="codex review {package}" \
 # 可選：安裝 repo-local pre-commit hook
 bash install.sh --profile strict-harness --hooks --target /path/to/your/project
 ```
+
+nested repo 時，在 `run` / `g4-start` / `g4-close` / `g5-package` /
+`full-review` / `install-hooks` 加上 `--repo service`。
 
 **v2025.04.04 新增**: 三 AI 角色分離（Maker / Checker / Gate）+ Reviewer Disclosure + Evidence Matrix + 機械強制偵測。
 **v2025.04.01 新增**: Brainstorming Capture skill（含 Discovery Gate）— 讓 AI 在動手前先把方向想清楚，stakeholder 確認後才進入工程。
