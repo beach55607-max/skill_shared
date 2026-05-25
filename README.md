@@ -48,6 +48,7 @@ Installer 會把 `.ai-dev/` 加到目標 repo 的 local `.git/info/exclude`，�
 - nested repo custody：用 `--repo <path>` 指定真正被審的 git repo
 - `ai-harness run` wrapper
 - G4 packet start/status/close
+- D2/D3 G4 role evidence loop：`implementer` / `spec_reviewer` / `quality_reviewer`
 - G5 review evidence package
 - command-based reviewer adapter
 - `full-review` package + reviewer wrapper
@@ -55,6 +56,7 @@ Installer 會把 `.ai-dev/` 加到目標 repo 的 local `.git/info/exclude`，�
 - `ai-harness smoke`
 
 G4 packet 欄位缺失、G5 diff 空包、base/head 相同、reviewer 不可用等情境會 fail closed，不會假裝 gate 已通過。
+D2/D3 packet 如果沒有三個 G4 role evidence 全部 `PASS`，也不能 close 成 `DONE` + `PASS`。
 
 ```bash
 bash install.sh --profile strict-harness --target /path/to/your/project
@@ -73,13 +75,48 @@ bash install.sh --profile strict-harness --hooks --target /path/to/workspace --r
   --command "codex exec 'fix the login retry bug'"
 
 /path/to/your/project/.ai-dev/bin/ai-harness g4-start \
+  --d-level D1 \
   --objective "fix login retry bug" \
   --allowed src/login.ts \
   --forbidden "auth schema, unrelated UI" \
   --verify "npm test -- login" \
   --stop "schema change required"
 
+# D2/D3 需要 G4 內部三角色 evidence，三個角色都 PASS 才能 g4-close DONE/PASS
+/path/to/your/project/.ai-dev/bin/ai-harness g4-start \
+  --d-level D2 \
+  --objective "change API contract" \
+  --allowed src/api.ts \
+  --forbidden "auth schema" \
+  --verify "npm test -- api" \
+  --stop "schema change required"
+
+/path/to/your/project/.ai-dev/bin/ai-harness g4-role-evidence \
+  --packet g4-20260525T010203Z \
+  --role implementer \
+  --status PASS \
+  --evidence evidence/implementer.md
+
+/path/to/your/project/.ai-dev/bin/ai-harness g4-role-evidence \
+  --packet g4-20260525T010203Z \
+  --role spec_reviewer \
+  --status PASS \
+  --evidence evidence/spec-reviewer.md
+
+/path/to/your/project/.ai-dev/bin/ai-harness g4-role-evidence \
+  --packet g4-20260525T010203Z \
+  --role quality_reviewer \
+  --status PASS \
+  --evidence evidence/quality-reviewer.md
+
+/path/to/your/project/.ai-dev/bin/ai-harness g4-close \
+  --packet g4-20260525T010203Z \
+  --return-status DONE \
+  --verification-status PASS \
+  --verification-evidence evidence/verify.log
+
 /path/to/your/project/.ai-dev/bin/ai-harness g5-package \
+  --packet g4-20260525T010203Z \
   --base main \
   --head HEAD \
   --scope src/login.ts
@@ -97,7 +134,7 @@ bash install.sh --profile strict-harness --hooks --target /path/to/your/project
 nested repo 時，在 `run` / `g4-start` / `g4-close` / `g5-package` /
 `full-review` / `install-hooks` 加上 `--repo service`。
 
-**v2026.05.25 新增**: Strict Harness public profile + nested repo custody（`--repo` / `AI_DEV_REVIEW_REPO`），可把 `.ai-dev/` runtime 放在 workspace root，同時把 G4/G5/hook 的 git evidence 綁到真正的 child repo。
+**v2026.05.25 新增**: Strict Harness public profile + nested repo custody（`--repo` / `AI_DEV_REVIEW_REPO`）、D2/D3 G4 role evidence loop，可把 `.ai-dev/` runtime 放在 workspace root，同時把 G4/G5/hook 的 git evidence 綁到真正的 child repo。
 **v2025.04.04 新增**: 三 AI 角色分離（Maker / Checker / Gate）+ Reviewer Disclosure + Evidence Matrix + 機械強制偵測。
 **v2025.04.01 新增**: Brainstorming Capture skill（含 Discovery Gate）— 讓 AI 在動手前先把方向想清楚，stakeholder 確認後才進入工程。
 
@@ -831,6 +868,7 @@ ai-dev-toolkit/
 │       │   └── README.md                                <- regression smoke coverage
 │       └── templates/
 │           ├── g4-packet.md
+│           ├── g4-role-evidence.md
 │           └── review-package.md
 ├── cw-brainstorming/                                    <- Brainstorming capture (NEW v2025.04.01)
 │   └── SKILL.md
@@ -945,11 +983,13 @@ ai-dev-toolkit/
 **新增 Profile:**
 - **Strict Harness Profile** — `bash install.sh --profile strict-harness --target <project>` 安裝 `.ai-dev/` runtime、artifacts、launcher、templates
 - **G4 packet CLI** — `ai-harness g4-start/status/close`，要求 objective、allowed files、forbidden scope、verification command、stop conditions
+- **D2/D3 G4 Role Evidence** — `ai-harness g4-role-evidence` 記錄 `implementer`、`spec_reviewer`、`quality_reviewer` 三個 internal maker-checker role；三者必須全為 `PASS`，D2/D3 packet 才能 close 成 `DONE` + `PASS`
 - **Run Wrapper** — `ai-harness run` 自動建立 G4 packet、執行 implementation command、跑 verification command、寫 evidence、關閉 packet
-- **G5 Review Package** — `ai-harness g5-package` 產生 BASE/HEAD、scope files、actual diff files、full diff hash、per-file hashes、untruncated scoped diff
+- **G5 Review Package** — `ai-harness g5-package` 產生 BASE/HEAD、scope files、actual diff files、full diff hash、per-file hashes、untruncated scoped diff；`--packet` 可綁定已 CLOSED/PASS 的 G4 packet
 - **Reviewer Adapter** — `ai-harness g5-review` / `full-review` 支援 command-based reviewer，回傳 `PASS` / `REJECT` / `BLOCKED` / `UNCERTAIN`
 - **Optional Pre-Commit Hook** — `install.sh --profile strict-harness --hooks` 擋掉沒有最新 CLOSED/PASS G4 packet 覆蓋的 staged files
 - **Regression Smoke** — `ai-harness smoke` 固定 G4 欄位缺失、G5 base/head mismatch、scope mismatch、reviewer unavailable、full diff embedding、hook scope、run wrapper failure 等 regression
+- **Role Loop Smoke** — 固定 D2/D3 缺 role evidence 不可 close、任一 role 非 PASS 不可 close、完整三角色 PASS 才可 close、D2 run wrapper 不可假 close
 
 **Nested Repo Custody:**
 - 新增 `--repo <path>` / `AI_DEV_REVIEW_REPO`，讓 `.ai-dev/` runtime 留在 workspace root，但 git SHA、diff、staged files、hook 都綁到真正被審的 child repo
@@ -959,6 +999,7 @@ ai-dev-toolkit/
 **限制:**
 - v1 一次只綁一個 review repo；不做多 repo fan-out orchestration
 - public profile 不依賴私有 runtime、外部 memory service、global block board
+- G4 role loop 是 internal maker-checker evidence，不取代 external G5 reviewer
 
 ### v2025.04.05 — 生成式驗證升級 + I1/I2/I3 rename
 

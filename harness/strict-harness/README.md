@@ -54,12 +54,13 @@ actual child repo while `.ai-dev/` remains under the target workspace.
 - `ai-harness run`
 - `ai-harness g4-start`
 - `ai-harness g4-status`
+- `ai-harness g4-role-evidence`
 - `ai-harness g4-close`
 - `ai-harness g5-package`
 - `ai-harness g5-review`
 - `ai-harness full-review`
 - `ai-harness install-hooks`
-- templates for G4 packets and G5 review packages
+- templates for G4 packets, G4 role evidence, and G5 review packages
 
 The harness is intentionally fail-closed: missing packet fields, invalid
 base/head bindings, empty diffs, scope mismatches, and unavailable reviewers
@@ -88,12 +89,47 @@ Create a G4 packet before implementation:
 
 ```bash
 .ai-dev/bin/ai-harness g4-start \
+  --d-level D1 \
   --objective "fix login retry bug" \
   --allowed src/login.ts \
   --forbidden "auth schema, unrelated UI" \
   --verify "npm test -- login" \
   --stop "schema change required"
 ```
+
+D2/D3 packets require the G4 internal role loop before `DONE` + `PASS`
+closeout. All three role evidence files must be `PASS`:
+
+```bash
+.ai-dev/bin/ai-harness g4-start \
+  --d-level D2 \
+  --objective "change API contract" \
+  --allowed src/api.ts \
+  --forbidden "auth schema" \
+  --verify "npm test -- api" \
+  --stop "schema change required"
+
+.ai-dev/bin/ai-harness g4-role-evidence \
+  --packet g4-20260525T010203Z \
+  --role implementer \
+  --status PASS \
+  --evidence evidence/implementer.md
+
+.ai-dev/bin/ai-harness g4-role-evidence \
+  --packet g4-20260525T010203Z \
+  --role spec_reviewer \
+  --status PASS \
+  --evidence evidence/spec-reviewer.md
+
+.ai-dev/bin/ai-harness g4-role-evidence \
+  --packet g4-20260525T010203Z \
+  --role quality_reviewer \
+  --status PASS \
+  --evidence evidence/quality-reviewer.md
+```
+
+The role loop is internal maker-checker evidence only. It does not replace G5
+external review.
 
 Close the packet after verification:
 
@@ -109,6 +145,7 @@ Create a G5 review evidence package:
 
 ```bash
 .ai-dev/bin/ai-harness g5-package \
+  --packet g4-20260525T010203Z \
   --base main \
   --head HEAD \
   --scope src/login.ts
@@ -141,6 +178,8 @@ AI_REVIEWER_CMD="codex review {package}" \
 ```
 
 `full-review` returns the same normalized exit codes as `g5-review`.
+For closed-loop D2/D3 work, pass `--packet` so the review package binds to a
+closed G4 packet whose role loop has already passed.
 
 Install the optional repo-local pre-commit hook:
 
