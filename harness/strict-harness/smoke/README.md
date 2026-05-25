@@ -14,6 +14,7 @@ Current smoke covers:
 - reviewer unavailable
 - full diff embedding with `embedded_truncated: false`
 - command-based reviewer `PASS` normalization
+- `full-review` blocks without a reviewer and passes with reviewer `PASS`
 - pre-commit hook accepts staged files covered by a `CLOSED` / `PASS` G4 packet
 - pre-commit hook rejects staged files outside packet `allowed_files`
 - `run` wrapper creates a packet, captures evidence, and closes PASS on success

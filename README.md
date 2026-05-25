@@ -48,6 +48,7 @@ bash install.sh --profile strict-harness --target /path/to/your/project # option
 - G4 packet start/status/close
 - G5 review evidence package
 - command-based reviewer adapter
+- `full-review` package + reviewer wrapper
 - optional repo-local pre-commit hook
 - `ai-harness smoke`
 
@@ -76,6 +77,12 @@ bash install.sh --profile strict-harness --target /path/to/your/project
   --base main \
   --head HEAD \
   --scope src/login.ts
+
+AI_REVIEWER_CMD="codex review {package}" \
+  /path/to/your/project/.ai-dev/bin/ai-harness full-review \
+    --base main \
+    --head HEAD \
+    --scope src/login.ts
 
 # 可選：安裝 repo-local pre-commit hook
 bash install.sh --profile strict-harness --hooks --target /path/to/your/project
@@ -618,6 +625,13 @@ bash install.sh --profile strict-harness --target /path/to/your/project --dry-ru
 
 # 可選：安裝 repo-local pre-commit hook，擋掉沒有 CLOSED/PASS G4 packet 的 staged changes
 bash install.sh --profile strict-harness --hooks --target /path/to/your/project
+
+# 一鍵產生 G5 package 並送 reviewer command
+AI_REVIEWER_CMD="codex review {package}" \
+  /path/to/your/project/.ai-dev/bin/ai-harness full-review \
+    --base main \
+    --head HEAD \
+    --scope src/login.ts
 
 # 看有哪些可裝
 bash install.sh --list

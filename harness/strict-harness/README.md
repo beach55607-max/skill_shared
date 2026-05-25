@@ -41,6 +41,7 @@ This public profile provides a single-repo strict workflow:
 - `ai-harness g4-close`
 - `ai-harness g5-package`
 - `ai-harness g5-review`
+- `ai-harness full-review`
 - `ai-harness install-hooks`
 - templates for G4 packets and G5 review packages
 
@@ -112,6 +113,18 @@ Reviewer commands must output one of:
 - `UNCERTAIN`
 
 If no reviewer is configured, `g5-review` returns `BLOCKED`.
+
+Create the package and run the reviewer in one step:
+
+```bash
+AI_REVIEWER_CMD="codex review {package}" \
+  .ai-dev/bin/ai-harness full-review \
+    --base main \
+    --head HEAD \
+    --scope src/login.ts
+```
+
+`full-review` returns the same normalized exit codes as `g5-review`.
 
 Install the optional repo-local pre-commit hook:
 
