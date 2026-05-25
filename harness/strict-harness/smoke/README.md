@@ -20,6 +20,12 @@ Current smoke covers:
 - `run` wrapper creates a packet, captures evidence, and closes PASS on success
 - pre-commit hook accepts staged changes produced by `run`
 - `run` wrapper records failed verification as non-PASS
+- D2/D3 G4 packets cannot close `DONE` + `PASS` without all three role evidence files
+- D2/D3 G4 packets reject any role evidence status other than `PASS`
+- D2/D3 G4 role evidence records and re-checks the source evidence hash
+- D2/D3 G4 role evidence must be captured at the same HEAD that G4 closes
+- D2 `run` wrapper leaves the packet open instead of fake-closing before role evidence
+- G5 packages can bind a closed G4 packet and expose its D-level / role-loop state
 - nested repo custody keeps `.ai-dev/` artifacts under the workspace root
 - nested repo custody binds G5 diffs to the child git repo through `--repo`
 - nested repo custody installs and runs the hook against child repo staged files

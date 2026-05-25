@@ -17,6 +17,7 @@ Usage:
 
   ai-harness run \
     [--repo path/to/repo] \
+    [--d-level D1] \
     --objective "..." \
     --allowed path[,path] \
     --forbidden "..." \
@@ -26,6 +27,7 @@ Usage:
 
   ai-harness g4-start \
     [--repo path/to/repo] \
+    [--d-level D1] \
     --objective "..." \
     --allowed path[,path] \
     --forbidden "..." \
@@ -33,6 +35,7 @@ Usage:
     --stop "..."
 
   ai-harness g4-status --packet <packet-id-or-path>
+  ai-harness g4-role-evidence --packet <packet> --role implementer|spec_reviewer|quality_reviewer --status PASS --evidence path/to/evidence.md [--notes "..."]
 
   ai-harness g4-close \
     [--repo path/to/repo] \
@@ -41,9 +44,9 @@ Usage:
     --verification-status PASS \
     --verification-evidence path/to/evidence.log
 
-  ai-harness g5-package [--repo path/to/repo] --base <sha> --head <sha> [--scope path[,path]]
+  ai-harness g5-package [--repo path/to/repo] [--packet <g4-packet>] --base <sha> --head <sha> [--scope path[,path]]
   ai-harness g5-review --package <review-package> [--cmd "reviewer command {package}"]
-  ai-harness full-review [--repo path/to/repo] --base <sha> --head <sha> [--scope path[,path]] [--cmd "..."]
+  ai-harness full-review [--repo path/to/repo] [--packet <g4-packet>] --base <sha> --head <sha> [--scope path[,path]] [--cmd "..."]
 
 Environment:
   AI_DEV_PROJECT_ROOT   Project root. Defaults to git top-level or current directory.
@@ -103,6 +106,34 @@ is_allowed_return_status() {
 is_allowed_verification_status() {
   case "$1" in
     PASS|FAIL|SKIPPED) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_allowed_d_level() {
+  case "$1" in
+    D0|D1|D2|D3) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_allowed_role() {
+  case "$1" in
+    implementer|spec_reviewer|quality_reviewer) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_allowed_role_status() {
+  case "$1" in
+    PASS|REJECTED|NOT_CHECKED|NEEDS_CONTEXT|BLOCKED) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+d_level_requires_role_loop() {
+  case "$1" in
+    D2|D3) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -208,6 +239,19 @@ maybe_set_review_repo_from_packet() {
   fi
 }
 
+resolve_existing_file_path() {
+  local file="$1"
+  local dir base
+  [[ -f "$file" ]] || die "file does not exist: $file"
+  if is_absolute_path "$file"; then
+    (cd "$(dirname "$file")" && printf '%s/%s\n' "$(pwd)" "$(basename "$file")")
+  else
+    dir="$(dirname "$file")"
+    base="$(basename "$file")"
+    (cd "$dir" && printf '%s/%s\n' "$(pwd)" "$base")
+  fi
+}
+
 ai_dev_dir() {
   local root
   root="$(project_root)"
@@ -224,6 +268,10 @@ artifact_dir() {
 
 g4_packet_dir() {
   echo "$(runtime_dir)/g4-packets"
+}
+
+g4_role_evidence_dir() {
+  echo "$(runtime_dir)/g4-role-evidence"
 }
 
 review_package_dir() {
@@ -243,7 +291,7 @@ state_dir() {
 }
 
 ensure_dirs() {
-  mkdir -p "$(runtime_dir)" "$(artifact_dir)" "$(g4_packet_dir)" "$(review_package_dir)" "$(review_result_dir)" "$(run_evidence_dir)" "$(state_dir)"
+  mkdir -p "$(runtime_dir)" "$(artifact_dir)" "$(g4_packet_dir)" "$(g4_role_evidence_dir)" "$(review_package_dir)" "$(review_result_dir)" "$(run_evidence_dir)" "$(state_dir)"
 }
 
 require_git_repo() {
@@ -293,6 +341,7 @@ list_has_items() {
 
 validate_packet_file() {
   local packet="$1"
+  local d_level
   [[ -f "$packet" ]] || die "packet file does not exist: $packet"
   grep -q '^packet_version: 1$' "$packet" || die "packet is missing packet_version: $packet"
   grep -q '^packet_id: ' "$packet" || die "packet is missing packet_id: $packet"
@@ -300,6 +349,10 @@ validate_packet_file() {
   grep -q '^status: ' "$packet" || die "packet is missing status: $packet"
   grep -q '^objective: ' "$packet" || die "packet is missing objective: $packet"
   grep -q '^verification_command: ' "$packet" || die "packet is missing verification_command: $packet"
+  d_level="$(packet_value "$packet" d_level || true)"
+  if [[ -n "$d_level" ]]; then
+    is_allowed_d_level "$d_level" || die "packet has invalid d_level: $packet"
+  fi
   list_has_items "$packet" "allowed_files:" || die "packet has no allowed_files entries: $packet"
   list_has_items "$packet" "forbidden_scope:" || die "packet has no forbidden_scope entries: $packet"
   list_has_items "$packet" "stop_conditions:" || die "packet has no stop_conditions entries: $packet"
@@ -319,6 +372,69 @@ list_section_values() {
     /^[A-Za-z0-9_]+:/ { in_list = 0 }
     in_list && /^- / { sub(/^- /, ""); print }
   ' "$file"
+}
+
+packet_d_level() {
+  local packet="$1"
+  local value
+  value="$(packet_value "$packet" d_level || true)"
+  if [[ -z "$value" ]]; then
+    value="D1"
+  fi
+  is_allowed_d_level "$value" || die "packet has invalid d_level: $packet"
+  printf '%s\n' "$value"
+}
+
+required_g4_roles() {
+  printf '%s\n' implementer spec_reviewer quality_reviewer
+}
+
+role_evidence_path() {
+  local packet_id="$1"
+  local role="$2"
+  echo "$(g4_role_evidence_dir)/$packet_id/$role.evidence.md"
+}
+
+validate_role_evidence_file() {
+  local evidence_file="$1"
+  local role status source_file evidence_hash current_hash
+  [[ -f "$evidence_file" ]] || die "role evidence file does not exist: $evidence_file"
+  grep -q '^role_evidence_version: 1$' "$evidence_file" || die "role evidence missing version: $evidence_file"
+  grep -q '^packet_id: ' "$evidence_file" || die "role evidence missing packet_id: $evidence_file"
+  grep -q '^role: ' "$evidence_file" || die "role evidence missing role: $evidence_file"
+  grep -q '^status: ' "$evidence_file" || die "role evidence missing status: $evidence_file"
+  grep -q '^evidence_head_sha: ' "$evidence_file" || die "role evidence missing evidence_head_sha: $evidence_file"
+  grep -q '^evidence_file: ' "$evidence_file" || die "role evidence missing evidence_file: $evidence_file"
+  grep -q '^evidence_hash: ' "$evidence_file" || die "role evidence missing evidence_hash: $evidence_file"
+  role="$(packet_value "$evidence_file" role)"
+  status="$(packet_value "$evidence_file" status)"
+  source_file="$(packet_value "$evidence_file" evidence_file)"
+  evidence_hash="$(packet_value "$evidence_file" evidence_hash)"
+  is_allowed_role "$role" || die "role evidence has invalid role: $evidence_file"
+  is_allowed_role_status "$status" || die "role evidence has invalid status: $evidence_file"
+  [[ -f "$source_file" ]] || die "role evidence source file missing: $source_file"
+  current_hash="$(git hash-object "$source_file")"
+  [[ "$current_hash" == "$evidence_hash" ]] || die "role evidence source hash changed: $source_file"
+}
+
+assert_g4_role_loop_passed() {
+  local packet_file="$1"
+  local expected_head="${2:-}"
+  local packet_id role evidence_file status current_head evidence_head
+  packet_id="$(packet_value "$packet_file" packet_id)"
+  sanitize_id "$packet_id"
+  current_head="${expected_head:-$(git_head_sha)}"
+
+  while IFS= read -r role; do
+    evidence_file="$(role_evidence_path "$packet_id" "$role")"
+    validate_role_evidence_file "$evidence_file"
+    status="$(packet_value "$evidence_file" status)"
+    evidence_head="$(packet_value "$evidence_file" evidence_head_sha)"
+    [[ "$evidence_head" == "$current_head" ]] || die "D2/D3 G4 role evidence was captured for a different HEAD for $role"
+    if [[ "$status" != "PASS" ]]; then
+      die "D2/D3 G4 role evidence is not PASS for $role: $status"
+    fi
+  done < <(required_g4_roles)
 }
 
 path_is_covered_by_allowed() {
@@ -499,6 +615,7 @@ cmd_g4_start() {
   local id=""
   local output=""
   local repo=""
+  local d_level="D1"
   local -a allowed_files=()
   local -a forbidden_scope=()
   local -a stop_conditions=()
@@ -509,6 +626,11 @@ cmd_g4_start() {
         require_arg_value "$1" "${2:-}"
         repo="$2"
         set_review_repo_override "$repo"
+        shift 2
+        ;;
+      --d-level)
+        require_arg_value "$1" "${2:-}"
+        d_level="$2"
         shift 2
         ;;
       --objective)
@@ -557,6 +679,7 @@ cmd_g4_start() {
   [[ ${#forbidden_scope[@]} -gt 0 ]] || die "g4-start requires at least one --forbidden entry"
   [[ -n "$verify_cmd" ]] || die "g4-start requires --verify"
   [[ ${#stop_conditions[@]} -gt 0 ]] || die "g4-start requires at least one --stop entry"
+  is_allowed_d_level "$d_level" || die "invalid --d-level: $d_level"
 
   require_git_repo
   ensure_dirs
@@ -580,6 +703,12 @@ cmd_g4_start() {
     echo "project_root: $(project_root)"
     echo "review_repo: $(review_repo_relpath)"
     echo "review_repo_root: $(review_repo_root)"
+    echo "d_level: $d_level"
+    if d_level_requires_role_loop "$d_level"; then
+      echo "role_loop_required: true"
+    else
+      echo "role_loop_required: false"
+    fi
     echo "base_sha: $(git_head_sha)"
     echo "status: OPEN"
     echo "objective: $objective"
@@ -593,6 +722,15 @@ cmd_g4_start() {
     echo
     echo "stop_conditions:"
     write_list "${stop_conditions[@]}"
+    echo
+    echo "required_roles:"
+    if d_level_requires_role_loop "$d_level"; then
+      required_g4_roles | while IFS= read -r role; do
+        printf -- '- %s\n' "$role"
+      done
+    else
+      echo "- NOT_REQUIRED"
+    fi
     echo
     echo "return_status_contract:"
     echo "- DONE"
@@ -624,7 +762,95 @@ cmd_g4_status() {
   [[ -n "$packet" ]] || die "g4-status requires --packet"
   packet="$(packet_path_from_id "$packet")"
   validate_packet_file "$packet"
-  grep -E '^(packet_id|created_at_utc|review_repo|base_sha|status|objective|verification_command|return_status|verification_status|closed_at_utc): ' "$packet" || true
+  grep -E '^(packet_id|created_at_utc|review_repo|d_level|role_loop_required|base_sha|status|objective|verification_command|return_status|verification_status|closed_at_utc): ' "$packet" || true
+}
+
+cmd_g4_role_evidence() {
+  local packet=""
+  local role=""
+  local status=""
+  local evidence=""
+  local notes=""
+  local packet_file packet_id d_level output_dir output_file
+  local evidence_abs evidence_hash evidence_head_sha
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --packet)
+        require_arg_value "$1" "${2:-}"
+        packet="$2"
+        shift 2
+        ;;
+      --role)
+        require_arg_value "$1" "${2:-}"
+        role="$2"
+        shift 2
+        ;;
+      --status)
+        require_arg_value "$1" "${2:-}"
+        status="$2"
+        shift 2
+        ;;
+      --evidence)
+        require_arg_value "$1" "${2:-}"
+        evidence="$2"
+        shift 2
+        ;;
+      --notes)
+        require_arg_value "$1" "${2:-}"
+        notes="$2"
+        shift 2
+        ;;
+      *)
+        die "unknown g4-role-evidence option: $1"
+        ;;
+    esac
+  done
+
+  [[ -n "$packet" ]] || die "g4-role-evidence requires --packet"
+  [[ -n "$role" ]] || die "g4-role-evidence requires --role"
+  [[ -n "$status" ]] || die "g4-role-evidence requires --status"
+  [[ -n "$evidence" ]] || die "g4-role-evidence requires --evidence"
+  is_allowed_role "$role" || die "invalid --role: $role"
+  is_allowed_role_status "$status" || die "invalid --status: $status"
+  evidence_abs="$(resolve_existing_file_path "$evidence")"
+  evidence_hash="$(git hash-object "$evidence_abs")"
+
+  ensure_dirs
+  packet_file="$(packet_path_from_id "$packet")"
+  validate_packet_file "$packet_file"
+  maybe_set_review_repo_from_packet "$packet_file"
+  require_git_repo
+  d_level="$(packet_d_level "$packet_file")"
+  if ! d_level_requires_role_loop "$d_level"; then
+    die "g4-role-evidence is only required for D2/D3 packets; packet d_level is $d_level"
+  fi
+  grep -q '^status: OPEN$' "$packet_file" || die "role evidence can only be added before G4 close: $packet_file"
+
+  packet_id="$(packet_value "$packet_file" packet_id)"
+  sanitize_id "$packet_id"
+  evidence_head_sha="$(git_head_sha)"
+  output_dir="$(g4_role_evidence_dir)/$packet_id"
+  output_file="$(role_evidence_path "$packet_id" "$role")"
+  mkdir -p "$output_dir"
+
+  {
+    echo "# G4 Role Evidence"
+    echo
+    echo "role_evidence_version: 1"
+    echo "created_at_utc: $(timestamp_utc)"
+    echo "packet_id: $packet_id"
+    echo "packet_file: $packet_file"
+    echo "role: $role"
+    echo "status: $status"
+    echo "evidence_head_sha: $evidence_head_sha"
+    echo "evidence_file: $evidence_abs"
+    echo "evidence_hash: $evidence_hash"
+    echo "notes: ${notes:-NONE}"
+  } > "$output_file"
+
+  validate_role_evidence_file "$output_file"
+  echo "$output_file"
 }
 
 cmd_g4_close() {
@@ -634,6 +860,7 @@ cmd_g4_close() {
   local verification_status=""
   local verification_evidence=""
   local packet_file tmp_file
+  local d_level
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -690,6 +917,11 @@ cmd_g4_close() {
   fi
 
   require_git_repo
+  d_level="$(packet_d_level "$packet_file")"
+  if [[ "$return_status" == "DONE" && "$verification_status" == "PASS" ]] && d_level_requires_role_loop "$d_level"; then
+    assert_g4_role_loop_passed "$packet_file"
+  fi
+
   tmp_file="$packet_file.tmp.$$"
   awk '
     BEGIN { replaced = 0 }
@@ -723,6 +955,7 @@ cmd_run() {
   local id=""
   local packet=""
   local repo=""
+  local d_level="D1"
   local review_root
   local evidence_dir run_log verify_log summary_log
   local run_exit verify_exit close_status verification_status
@@ -736,6 +969,11 @@ cmd_run() {
         require_arg_value "$1" "${2:-}"
         repo="$2"
         set_review_repo_override "$repo"
+        shift 2
+        ;;
+      --d-level)
+        require_arg_value "$1" "${2:-}"
+        d_level="$2"
         shift 2
         ;;
       --objective)
@@ -790,6 +1028,7 @@ cmd_run() {
   [[ -n "$verify_cmd" ]] || die "run requires --verify"
   [[ ${#stop_conditions[@]} -gt 0 ]] || die "run requires at least one --stop entry"
   [[ -n "$run_cmd" ]] || die "run requires --command or -- command"
+  is_allowed_d_level "$d_level" || die "invalid --d-level: $d_level"
 
   require_git_repo
   ensure_dirs
@@ -810,6 +1049,7 @@ cmd_run() {
   packet="$(
     cmd_g4_start \
       --id "$id" \
+      --d-level "$d_level" \
       --objective "$objective" \
       --allowed "$(IFS=,; echo "${allowed_files[*]}")" \
       --forbidden "$(IFS=,; echo "${forbidden_scope[*]}")" \
@@ -824,6 +1064,7 @@ cmd_run() {
     echo "project_root: $(project_root)"
     echo "review_repo: $(review_repo_relpath)"
     echo "review_repo_root: $review_root"
+    echo "d_level: $d_level"
     echo "command: $run_cmd"
     echo "verification_command: $verify_cmd"
   } > "$summary_log"
@@ -870,6 +1111,16 @@ cmd_run() {
     verification_status="FAIL"
   fi
 
+  if [[ "$close_status" == "DONE" && "$verification_status" == "PASS" ]] && d_level_requires_role_loop "$d_level"; then
+    {
+      echo "role_loop_status: REQUIRED_BEFORE_G4_CLOSE"
+      echo "role_loop_required: true"
+      echo "required_roles: implementer,spec_reviewer,quality_reviewer"
+    } >> "$summary_log"
+    echo "$summary_log"
+    die "D2/D3 run completed verification, but G4 remains OPEN until implementer/spec_reviewer/quality_reviewer role evidence is recorded and g4-close is run"
+  fi
+
   cmd_g4_close \
     --packet "$packet" \
     --return-status "$close_status" \
@@ -909,6 +1160,11 @@ cmd_g5_package() {
   local head="HEAD"
   local output=""
   local repo=""
+  local packet=""
+  local packet_file=""
+  local packet_d_level=""
+  local packet_base_sha=""
+  local packet_closed_head_sha=""
   local root
   local base_sha head_sha
   local -a scope_files=()
@@ -922,6 +1178,11 @@ cmd_g5_package() {
         require_arg_value "$1" "${2:-}"
         repo="$2"
         set_review_repo_override "$repo"
+        shift 2
+        ;;
+      --packet)
+        require_arg_value "$1" "${2:-}"
+        packet="$2"
         shift 2
         ;;
       --base)
@@ -950,6 +1211,21 @@ cmd_g5_package() {
     esac
   done
 
+  if [[ -n "$packet" ]]; then
+    packet_file="$(packet_path_from_id "$packet")"
+    validate_packet_file "$packet_file"
+    maybe_set_review_repo_from_packet "$packet_file"
+    grep -q '^status: CLOSED$' "$packet_file" || die "g5-package --packet requires CLOSED G4 packet"
+    grep -q '^verification_status: PASS$' "$packet_file" || die "g5-package --packet requires PASS G4 packet"
+    packet_d_level="$(packet_d_level "$packet_file")"
+    packet_base_sha="$(packet_value "$packet_file" base_sha)"
+    packet_closed_head_sha="$(packet_value "$packet_file" closed_head_sha || true)"
+    [[ -n "$packet_closed_head_sha" ]] || die "g5-package --packet requires packet closed_head_sha"
+    if d_level_requires_role_loop "$packet_d_level"; then
+      assert_g4_role_loop_passed "$packet_file" "$packet_closed_head_sha"
+    fi
+  fi
+
   require_git_repo
   ensure_dirs
   root="$(review_repo_root)"
@@ -965,6 +1241,10 @@ cmd_g5_package() {
   base_sha="$(resolve_commit "$root" "$base")" || die "invalid --base commit: $base"
   head_sha="$(resolve_commit "$root" "$head")" || die "invalid --head commit: $head"
   [[ "$base_sha" != "$head_sha" ]] || die "BASE_SHA and HEAD_SHA must be different"
+  if [[ -n "$packet_file" ]]; then
+    [[ "$base_sha" == "$packet_base_sha" ]] || die "g5-package --packet BASE_SHA does not match G4 packet base_sha"
+    [[ "$head_sha" == "$packet_closed_head_sha" ]] || die "g5-package --packet HEAD_SHA does not match G4 packet closed_head_sha"
+  fi
 
   if [[ ${#scope_files[@]} -gt 0 ]]; then
     while IFS= read -r file; do
@@ -1012,6 +1292,13 @@ cmd_g5_package() {
     echo "project_root: $(project_root)"
     echo "review_repo: $(review_repo_relpath)"
     echo "review_repo_root: $root"
+    echo "g4_packet: ${packet_file:-NOT_BOUND}"
+    echo "g4_d_level: ${packet_d_level:-NOT_BOUND}"
+    if [[ -n "$packet_d_level" ]] && d_level_requires_role_loop "$packet_d_level"; then
+      echo "g4_role_loop_required: true"
+    else
+      echo "g4_role_loop_required: false"
+    fi
     echo "BASE_SHA: $base_sha"
     echo "HEAD_SHA: $head_sha"
     echo "full_diff_hash: $full_diff_hash"
@@ -1156,6 +1443,7 @@ cmd_full_review() {
   local reviewer_cmd="${AI_REVIEWER_CMD:-}"
   local package=""
   local repo=""
+  local packet=""
   local -a scope_files=()
   local -a package_args=()
 
@@ -1165,6 +1453,11 @@ cmd_full_review() {
         require_arg_value "$1" "${2:-}"
         repo="$2"
         set_review_repo_override "$repo"
+        shift 2
+        ;;
+      --packet)
+        require_arg_value "$1" "${2:-}"
+        packet="$2"
         shift 2
         ;;
       --base)
@@ -1195,6 +1488,9 @@ cmd_full_review() {
 
   [[ -n "$base" ]] || die "full-review requires --base"
   package_args=(--base "$base" --head "$head")
+  if [[ -n "$packet" ]]; then
+    package_args+=(--packet "$packet")
+  fi
   if [[ ${#scope_files[@]} -gt 0 ]]; then
     package_args+=(--scope "$(IFS=,; echo "${scope_files[*]}")")
   fi
@@ -1226,6 +1522,7 @@ expect_exit() {
 
 cmd_smoke() {
   local dir home failed tmp root self base head package evidence
+  local d2_base d2_head
   local nested_workspace nested_repo nested_base nested_head nested_package nested_evidence nested_packet nested_hook
   dir="$(ai_dev_dir)"
   home="$(harness_home)"
@@ -1264,6 +1561,13 @@ cmd_smoke() {
     failed=1
   else
     echo "PASS review package template exists"
+  fi
+
+  if [[ -z "$home" || ! -f "$home/templates/g4-role-evidence.md" ]]; then
+    echo "FAIL G4 role evidence template missing"
+    failed=1
+  else
+    echo "PASS G4 role evidence template exists"
   fi
 
   self="$(self_path)"
@@ -1345,21 +1649,159 @@ cmd_smoke() {
   grep -q '^verification_status: FAIL$' "$root/.ai-dev/runtime/g4-packets/smoke-run-fail.packet.md" || { echo "FAIL run wrapper failure did not record FAIL"; failed=1; }
   echo "PASS run wrapper records failed verification"
 
+  git -C "$root" reset --hard -q "$head"
+  d2_base="$(git -C "$root" rev-parse HEAD)"
+  packet="$(
+    AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-start \
+      --id smoke-d2-packet \
+      --d-level D2 \
+      --objective "D2 role loop smoke task" \
+      --allowed app.txt \
+      --forbidden "anything outside app.txt" \
+      --verify "cat verify.log" \
+      --stop "unexpected scope"
+  )"
+  echo "d2 role loop change" >> "$root/app.txt"
+  git -C "$root" add app.txt
+  git -C "$root" commit -q -m "d2 role loop change"
+  d2_head="$(git -C "$root" rev-parse HEAD)"
+  expect_exit 2 "D2 G4 close without role evidence fails closed" \
+    env AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-close \
+      --packet "$packet" \
+      --return-status DONE \
+      --verification-status PASS \
+      --verification-evidence "$evidence" || failed=1
+  AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-role-evidence \
+    --packet "$packet" \
+    --role implementer \
+    --status PASS \
+    --evidence "$evidence" \
+    --notes "implementation checked" >/dev/null
+  AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-role-evidence \
+    --packet "$packet" \
+    --role spec_reviewer \
+    --status PASS \
+    --evidence "$evidence" \
+    --notes "spec checked" >/dev/null
+  AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-role-evidence \
+    --packet "$packet" \
+    --role quality_reviewer \
+    --status PASS \
+    --evidence "$evidence" \
+    --notes "quality checked" >/dev/null
+  AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-close \
+    --packet "$packet" \
+    --return-status DONE \
+    --verification-status PASS \
+    --verification-evidence "$evidence" >/dev/null
+  grep -q '^d_level: D2$' "$root/.ai-dev/runtime/g4-packets/smoke-d2-packet.packet.md" || { echo "FAIL D2 packet did not record d_level"; failed=1; }
+  echo "PASS D2 G4 closes only after all role evidence PASS"
+
+  packet="$(
+    AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-start \
+      --id smoke-d2-reject-packet \
+      --d-level D2 \
+      --objective "D2 role reject smoke task" \
+      --allowed app.txt \
+      --forbidden "anything outside app.txt" \
+      --verify "cat verify.log" \
+      --stop "unexpected scope"
+  )"
+  AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-role-evidence --packet "$packet" --role implementer --status PASS --evidence "$evidence" >/dev/null
+  AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-role-evidence --packet "$packet" --role spec_reviewer --status REJECTED --evidence "$evidence" >/dev/null
+  AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-role-evidence --packet "$packet" --role quality_reviewer --status PASS --evidence "$evidence" >/dev/null
+  expect_exit 2 "D2 G4 rejected role evidence blocks PASS close" \
+    env AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-close \
+      --packet "$packet" \
+      --return-status DONE \
+      --verification-status PASS \
+      --verification-evidence "$evidence" || failed=1
+  echo "PASS D2 G4 role evidence rejects non-PASS role"
+
+  local tamper_evidence
+  tamper_evidence="$root/tamper-evidence.log"
+  echo "tamper evidence v1" > "$tamper_evidence"
+  packet="$(
+    AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-start \
+      --id smoke-d2-tamper-packet \
+      --d-level D2 \
+      --objective "D2 role tamper smoke task" \
+      --allowed app.txt \
+      --forbidden "anything outside app.txt" \
+      --verify "cat verify.log" \
+      --stop "unexpected scope"
+  )"
+  AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-role-evidence --packet "$packet" --role implementer --status PASS --evidence "$tamper_evidence" >/dev/null
+  AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-role-evidence --packet "$packet" --role spec_reviewer --status PASS --evidence "$tamper_evidence" >/dev/null
+  AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-role-evidence --packet "$packet" --role quality_reviewer --status PASS --evidence "$tamper_evidence" >/dev/null
+  echo "tamper evidence v2" > "$tamper_evidence"
+  expect_exit 2 "D2 G4 role evidence hash tamper blocks PASS close" \
+    env AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-close \
+      --packet "$packet" \
+      --return-status DONE \
+      --verification-status PASS \
+      --verification-evidence "$evidence" || failed=1
+  echo "PASS D2 G4 role evidence hash tamper is blocked"
+
+  packet="$(
+    AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-start \
+      --id smoke-d2-head-mismatch-packet \
+      --d-level D2 \
+      --objective "D2 role head mismatch smoke task" \
+      --allowed app.txt \
+      --forbidden "anything outside app.txt" \
+      --verify "cat verify.log" \
+      --stop "unexpected scope"
+  )"
+  AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-role-evidence --packet "$packet" --role implementer --status PASS --evidence "$evidence" >/dev/null
+  AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-role-evidence --packet "$packet" --role spec_reviewer --status PASS --evidence "$evidence" >/dev/null
+  AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-role-evidence --packet "$packet" --role quality_reviewer --status PASS --evidence "$evidence" >/dev/null
+  echo "head mismatch change" >> "$root/app.txt"
+  git -C "$root" add app.txt
+  git -C "$root" commit -q -m "head mismatch change"
+  expect_exit 2 "D2 G4 role evidence HEAD mismatch blocks PASS close" \
+    env AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-close \
+      --packet "$packet" \
+      --return-status DONE \
+      --verification-status PASS \
+      --verification-evidence "$evidence" || failed=1
+  git -C "$root" reset --hard -q "$d2_head"
+  echo "PASS D2 G4 role evidence HEAD mismatch is blocked"
+
+  expect_exit 2 "D2 run wrapper leaves packet open until role evidence" \
+    env AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" run \
+      --id smoke-d2-run-open \
+      --d-level D2 \
+      --objective "D2 run wrapper smoke" \
+      --allowed app.txt \
+      --forbidden "other files" \
+      --verify "grep -q d2run app.txt" \
+      --stop "unexpected scope" \
+      --command "echo d2run >> app.txt" || failed=1
+  grep -q '^status: OPEN$' "$root/.ai-dev/runtime/g4-packets/smoke-d2-run-open.packet.md" || { echo "FAIL D2 run wrapper did not leave packet OPEN"; failed=1; }
+  echo "PASS D2 run wrapper does not fake-close without role evidence"
+
   expect_exit 2 "g5-package same base/head fails closed" \
     env AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g5-package --base "$head" --head "$head" || failed=1
 
   expect_exit 2 "g5-package scope mismatch fails closed" \
     env AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g5-package --base "$base" --head "$head" --scope app.txt,README.md || failed=1
 
+  expect_exit 2 "g5-package packet range mismatch fails closed" \
+    env AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g5-package --packet smoke-d2-packet --base "$base" --head "$head" --scope app.txt || failed=1
+
   package="$(
     AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g5-package \
-      --base "$base" \
-      --head "$head" \
+      --packet smoke-d2-packet \
+      --base "$d2_base" \
+      --head "$d2_head" \
       --scope app.txt
   )"
+  grep -q '^g4_d_level: D2$' "$package" || { echo "FAIL review package did not bind G4 d_level"; failed=1; }
+  grep -q '^g4_role_loop_required: true$' "$package" || { echo "FAIL review package did not bind G4 role loop"; failed=1; }
   grep -q '^embedded_truncated: false$' "$package" || { echo "FAIL review package truncation marker"; failed=1; }
-  grep -q '^+beta$' "$package" || { echo "FAIL review package does not embed full diff"; failed=1; }
-  echo "PASS g5 package embeds full untruncated diff"
+  grep -q '^+d2 role loop change$' "$package" || { echo "FAIL review package does not embed packet-bound full diff"; failed=1; }
+  echo "PASS g5 package embeds full untruncated diff and binds G4 packet"
 
   expect_exit 2 "g5-review unavailable reviewer is blocked" \
     env AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g5-review --package "$package" || failed=1
@@ -1475,6 +1917,9 @@ case "$command_name" in
     ;;
   g4-status)
     cmd_g4_status "$@"
+    ;;
+  g4-role-evidence)
+    cmd_g4_role_evidence "$@"
     ;;
   g4-close)
     cmd_g4_close "$@"
