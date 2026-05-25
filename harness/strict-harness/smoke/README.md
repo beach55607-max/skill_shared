@@ -20,6 +20,6 @@ Current smoke covers:
 - `run` wrapper creates a packet, captures evidence, and closes PASS on success
 - pre-commit hook accepts staged changes produced by `run`
 - `run` wrapper records failed verification as non-PASS
-
-Future smoke should add nested-repo custody coverage only after that feature
-exists in the public profile.
+- nested repo custody keeps `.ai-dev/` artifacts under the workspace root
+- nested repo custody binds G5 diffs to the child git repo through `--repo`
+- nested repo custody installs and runs the hook against child repo staged files
