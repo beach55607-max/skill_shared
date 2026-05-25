@@ -35,6 +35,7 @@ This public profile provides a single-repo strict workflow:
 
 - project-local runtime and artifact directories
 - `ai-harness smoke`
+- `ai-harness run`
 - `ai-harness g4-start`
 - `ai-harness g4-status`
 - `ai-harness g4-close`
@@ -48,6 +49,23 @@ base/head bindings, empty diffs, scope mismatches, and unavailable reviewers
 block instead of passing silently.
 
 ## Commands
+
+Run an implementation command inside the wrapper:
+
+```bash
+.ai-dev/bin/ai-harness run \
+  --objective "fix login retry bug" \
+  --allowed src/login.ts \
+  --forbidden "auth schema, unrelated UI" \
+  --verify "npm test -- login" \
+  --stop "schema change required" \
+  --command "codex exec 'fix the login retry bug'"
+```
+
+`run` creates a G4 packet, executes the implementation command, runs the
+verification command, writes evidence logs under `.ai-dev/runtime/run-evidence/`,
+and closes the packet. If implementation or verification fails, the packet is
+closed with a non-PASS status instead of being left open or falsely passed.
 
 Create a G4 packet before implementation:
 

@@ -16,6 +16,9 @@ Current smoke covers:
 - command-based reviewer `PASS` normalization
 - pre-commit hook accepts staged files covered by a `CLOSED` / `PASS` G4 packet
 - pre-commit hook rejects staged files outside packet `allowed_files`
+- `run` wrapper creates a packet, captures evidence, and closes PASS on success
+- pre-commit hook accepts staged changes produced by `run`
+- `run` wrapper records failed verification as non-PASS
 
 Future smoke should add nested-repo custody coverage only after that feature
 exists in the public profile.
