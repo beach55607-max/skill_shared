@@ -40,6 +40,7 @@ This public profile provides a single-repo strict workflow:
 - `ai-harness g4-close`
 - `ai-harness g5-package`
 - `ai-harness g5-review`
+- `ai-harness install-hooks`
 - templates for G4 packets and G5 review packages
 
 The harness is intentionally fail-closed: missing packet fields, invalid
@@ -93,6 +94,33 @@ Reviewer commands must output one of:
 - `UNCERTAIN`
 
 If no reviewer is configured, `g5-review` returns `BLOCKED`.
+
+Install the optional repo-local pre-commit hook:
+
+```bash
+.ai-dev/bin/ai-harness install-hooks
+```
+
+The hook checks staged files before commit:
+
+- there must be a latest `CLOSED` / `PASS` G4 packet
+- every staged file must be covered by that packet's `allowed_files`
+- staged files outside the packet are blocked
+
+To replace an existing unmanaged hook:
+
+```bash
+.ai-dev/bin/ai-harness install-hooks --force
+```
+
+Emergency bypass is explicit:
+
+```bash
+AI_HARNESS_SKIP=1 git commit -m "..."
+```
+
+Use bypass only when you are intentionally accepting that the commit did not
+pass the local strict-harness pre-commit check.
 
 ## Non-Goals
 

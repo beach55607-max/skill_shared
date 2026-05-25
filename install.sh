@@ -7,6 +7,7 @@
 #   bash install.sh --skill 1 3        # 只裝 Boundary-First + Adversarial Review
 #   bash install.sh --target /my/proj  # 指定專案目錄
 #   bash install.sh --profile strict-harness --target /my/proj
+#   bash install.sh --profile strict-harness --hooks --target /my/proj
 #   bash install.sh --uninstall        # 移除已安裝的 skill
 
 set -euo pipefail
@@ -17,6 +18,8 @@ TARGET_DIR="."
 AGENT="claude"  # claude or codex
 PROFILE=""
 DRY_RUN=false
+INSTALL_HOOKS=false
+FORCE_HOOKS=false
 
 # --- Skill definitions ---
 # Format: "id:source_dir:target_name:description"
@@ -90,6 +93,20 @@ install_strict_harness() {
   run_or_print cp "$profile_src/bin/ai-harness.sh" "$launcher"
   run_or_print chmod +x "$launcher"
 
+  if [[ "$INSTALL_HOOKS" == true ]]; then
+    if [[ "$DRY_RUN" == true ]]; then
+      if [[ "$FORCE_HOOKS" == true ]]; then
+        run_or_print env AI_DEV_PROJECT_ROOT="$TARGET_DIR" AI_DEV_DIR="$install_root" "$launcher" install-hooks --force
+      else
+        run_or_print env AI_DEV_PROJECT_ROOT="$TARGET_DIR" AI_DEV_DIR="$install_root" "$launcher" install-hooks
+      fi
+    elif [[ "$FORCE_HOOKS" == true ]]; then
+      AI_DEV_PROJECT_ROOT="$TARGET_DIR" AI_DEV_DIR="$install_root" "$launcher" install-hooks --force
+    else
+      AI_DEV_PROJECT_ROOT="$TARGET_DIR" AI_DEV_DIR="$install_root" "$launcher" install-hooks
+    fi
+  fi
+
   echo ""
   if [[ "$DRY_RUN" == true ]]; then
     echo "Dry-run complete. No files were changed."
@@ -127,6 +144,14 @@ while [[ $# -gt 0 ]]; do
       DRY_RUN=true
       shift
       ;;
+    --hooks)
+      INSTALL_HOOKS=true
+      shift
+      ;;
+    --force-hooks)
+      FORCE_HOOKS=true
+      shift
+      ;;
     --skill)
       shift
       while [[ $# -gt 0 && ! "$1" =~ ^-- ]]; do
@@ -151,6 +176,8 @@ while [[ $# -gt 0 ]]; do
       echo "  --skill <id...>    Install specific skills by ID (e.g., --skill 1 3)"
       echo "  --profile <name>   Install an optional workflow profile (strict-harness)"
       echo "  --dry-run          Print planned filesystem actions without changing files"
+      echo "  --hooks            Install strict-harness repo-local git hooks"
+      echo "  --force-hooks      Replace an existing unmanaged git hook when used with --hooks"
       echo "  --list             List available skills"
       echo "  --uninstall        Remove installed skills"
       echo "  --help             Show this help"
@@ -161,6 +188,7 @@ while [[ $# -gt 0 ]]; do
       echo "  bash install.sh --skill 1 3         # Install Boundary-First + Adversarial Review"
       echo "  bash install.sh --target ~/myproj   # Install to specific project"
       echo "  bash install.sh --profile strict-harness --target ~/myproj"
+      echo "  bash install.sh --profile strict-harness --hooks --target ~/myproj"
       exit 0
       ;;
     *)
@@ -180,6 +208,11 @@ if [[ -n "$PROFILE" ]]; then
   fi
 
   echo "Unknown profile: $PROFILE. Available profiles: strict-harness" >&2
+  exit 1
+fi
+
+if [[ "$INSTALL_HOOKS" == true || "$FORCE_HOOKS" == true ]]; then
+  echo "--hooks and --force-hooks require --profile strict-harness." >&2
   exit 1
 fi
 

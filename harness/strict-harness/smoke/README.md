@@ -14,6 +14,8 @@ Current smoke covers:
 - reviewer unavailable
 - full diff embedding with `embedded_truncated: false`
 - command-based reviewer `PASS` normalization
+- pre-commit hook accepts staged files covered by a `CLOSED` / `PASS` G4 packet
+- pre-commit hook rejects staged files outside packet `allowed_files`
 
-Future smoke should add coverage for hook integration and nested-repo custody
-only after those features exist in the public profile.
+Future smoke should add nested-repo custody coverage only after that feature
+exists in the public profile.

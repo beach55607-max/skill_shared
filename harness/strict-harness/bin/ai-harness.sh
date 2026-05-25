@@ -11,6 +11,8 @@ Usage:
   ai-harness help
   ai-harness init
   ai-harness smoke
+  ai-harness install-hooks [--force]
+  ai-harness hook pre-commit
 
   ai-harness g4-start \
     --objective "..." \
@@ -34,6 +36,7 @@ Environment:
   AI_DEV_PROJECT_ROOT   Project root. Defaults to git top-level or current directory.
   AI_DEV_DIR            Runtime root. Defaults to <project>/.ai-dev.
   AI_REVIEWER_CMD       Command used by g5-review. Use {package} as placeholder.
+  AI_HARNESS_SKIP       Set to 1 to bypass local hooks with an explicit reason.
 USAGE
 }
 
@@ -161,8 +164,12 @@ review_result_dir() {
   echo "$(artifact_dir)/reviews"
 }
 
+state_dir() {
+  echo "$(runtime_dir)/state"
+}
+
 ensure_dirs() {
-  mkdir -p "$(runtime_dir)" "$(artifact_dir)" "$(g4_packet_dir)" "$(review_package_dir)" "$(review_result_dir)"
+  mkdir -p "$(runtime_dir)" "$(artifact_dir)" "$(g4_packet_dir)" "$(review_package_dir)" "$(review_result_dir)" "$(state_dir)"
 }
 
 require_git_repo() {
@@ -224,6 +231,35 @@ validate_packet_file() {
   list_has_items "$packet" "stop_conditions:" || die "packet has no stop_conditions entries: $packet"
 }
 
+packet_value() {
+  local packet="$1"
+  local key="$2"
+  awk -F': ' -v key="$key" '$1 == key { print substr($0, length(key) + 3); exit }' "$packet"
+}
+
+list_section_values() {
+  local file="$1"
+  local header="$2"
+  awk -v header="$header" '
+    $0 == header { in_list = 1; next }
+    /^[A-Za-z0-9_]+:/ { in_list = 0 }
+    in_list && /^- / { sub(/^- /, ""); print }
+  ' "$file"
+}
+
+path_is_covered_by_allowed() {
+  local path="$1"
+  shift
+  local allowed
+  for allowed in "$@"; do
+    allowed="${allowed%/}"
+    if [[ "$path" == "$allowed" || "$path" == "$allowed/"* ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 write_list() {
   local item
   for item in "$@"; do
@@ -234,6 +270,125 @@ write_list() {
 cmd_init() {
   ensure_dirs
   echo "Initialized strict harness runtime at $(ai_dev_dir)"
+}
+
+cmd_install_hooks() {
+  local force=false
+  local root hook_path launcher_rel launcher_abs
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --force)
+        force=true
+        shift
+        ;;
+      *)
+        die "unknown install-hooks option: $1"
+        ;;
+    esac
+  done
+
+  require_git_repo
+  ensure_dirs
+  root="$(project_root)"
+  hook_path="$root/.git/hooks/pre-commit"
+  launcher_rel=".ai-dev/bin/ai-harness"
+  launcher_abs="$(ai_dev_dir)/bin/ai-harness"
+
+  if [[ ! -x "$launcher_abs" ]]; then
+    die "ai-harness launcher is missing or not executable: $launcher_abs"
+  fi
+
+  if [[ -e "$hook_path" ]] && ! grep -q "ai-dev-toolkit strict-harness managed hook" "$hook_path"; then
+    if [[ "$force" != true ]]; then
+      die "existing unmanaged pre-commit hook found; rerun with --force to replace it"
+    fi
+  fi
+
+  cat > "$hook_path" <<HOOK
+#!/usr/bin/env bash
+# ai-dev-toolkit strict-harness managed hook
+set -euo pipefail
+
+if [[ "\${AI_HARNESS_SKIP:-}" == "1" ]]; then
+  echo "strict-harness: AI_HARNESS_SKIP=1, bypassing pre-commit hook" >&2
+  exit 0
+fi
+
+exec "$launcher_rel" hook pre-commit
+HOOK
+  chmod +x "$hook_path"
+  echo "Installed strict-harness pre-commit hook: $hook_path"
+}
+
+cmd_hook_pre_commit() {
+  local root packet_dir packet latest=""
+  local -a staged_files=()
+  local -a allowed_files=()
+  local file
+  local covered=0
+
+  require_git_repo
+  ensure_dirs
+  root="$(project_root)"
+  packet_dir="$(g4_packet_dir)"
+
+  while IFS= read -r file; do
+    [[ -n "$file" ]] && staged_files+=("$file")
+  done < <(git -C "$root" diff --cached --name-only)
+
+  if [[ ${#staged_files[@]} -eq 0 ]]; then
+    echo "strict-harness: no staged files"
+    return 0
+  fi
+
+  if [[ ! -d "$packet_dir" ]]; then
+    die "no G4 packet directory found; run ai-harness g4-start/g4-close before committing"
+  fi
+
+  while IFS= read -r packet; do
+    validate_packet_file "$packet"
+    if [[ "$(packet_value "$packet" status)" == "CLOSED" && "$(packet_value "$packet" verification_status)" == "PASS" ]]; then
+      latest="$packet"
+      break
+    fi
+  done < <(find "$packet_dir" -type f -name '*.packet.md' 2>/dev/null | sort -r)
+
+  [[ -n "$latest" ]] || die "no CLOSED/PASS G4 packet found for staged changes"
+
+  while IFS= read -r file; do
+    [[ -n "$file" ]] && allowed_files+=("$file")
+  done < <(list_section_values "$latest" "allowed_files:")
+
+  [[ ${#allowed_files[@]} -gt 0 ]] || die "latest CLOSED/PASS G4 packet has no allowed files: $latest"
+
+  for file in "${staged_files[@]}"; do
+    if path_is_covered_by_allowed "$file" "${allowed_files[@]}"; then
+      covered=$((covered + 1))
+    else
+      echo "staged file not covered by latest CLOSED/PASS G4 packet: $file" >&2
+      echo "packet: $latest" >&2
+      die "staged changes exceed G4 packet allowed_files"
+    fi
+  done
+
+  echo "strict-harness: pre-commit PASS ($covered staged file(s), packet: $(basename "$latest"))"
+}
+
+cmd_hook() {
+  local hook_name="${1:-}"
+  if [[ $# -gt 0 ]]; then
+    shift
+  fi
+
+  case "$hook_name" in
+    pre-commit)
+      cmd_hook_pre_commit "$@"
+      ;;
+    *)
+      die "unknown hook command: ${hook_name:-MISSING}"
+      ;;
+  esac
 }
 
 cmd_g4_start() {
@@ -794,6 +949,17 @@ cmd_smoke() {
     --verification-evidence "$evidence" >/dev/null
   echo "PASS g4 packet close requires evidence"
 
+  echo "gamma" >> "$root/app.txt"
+  git -C "$root" add app.txt
+  AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" hook pre-commit >/dev/null
+  echo "PASS pre-commit hook accepts staged files covered by CLOSED/PASS G4 packet"
+  echo "other" > "$root/other.txt"
+  git -C "$root" add other.txt
+  expect_exit 2 "pre-commit hook rejects staged files outside packet allowed_files" \
+    env AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" hook pre-commit || failed=1
+  git -C "$root" reset -q HEAD other.txt app.txt
+  rm -f "$root/other.txt"
+
   expect_exit 2 "g5-package same base/head fails closed" \
     env AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g5-package --base "$head" --head "$head" || failed=1
 
@@ -856,6 +1022,12 @@ case "$command_name" in
     ;;
   g5-review)
     cmd_g5_review "$@"
+    ;;
+  install-hooks)
+    cmd_install_hooks "$@"
+    ;;
+  hook)
+    cmd_hook "$@"
     ;;
   *)
     echo "Unknown command: $command_name" >&2

@@ -47,6 +47,7 @@ bash install.sh --profile strict-harness --target /path/to/your/project # option
 - G4 packet start/status/close
 - G5 review evidence package
 - command-based reviewer adapter
+- optional repo-local pre-commit hook
 - `ai-harness smoke`
 
 G4 packet 欄位缺失、G5 diff 空包、base/head 相同、reviewer 不可用等情境會 fail closed，不會假裝 gate 已通過。
@@ -66,6 +67,9 @@ bash install.sh --profile strict-harness --target /path/to/your/project
   --base main \
   --head HEAD \
   --scope src/login.ts
+
+# 可選：安裝 repo-local pre-commit hook
+bash install.sh --profile strict-harness --hooks --target /path/to/your/project
 ```
 
 **v2025.04.04 新增**: 三 AI 角色分離（Maker / Checker / Gate）+ Reviewer Disclosure + Evidence Matrix + 機械強制偵測。
@@ -593,6 +597,9 @@ bash install.sh --profile strict-harness --target /path/to/your/project --dry-ru
 
 # 驗證 strict harness 安裝與 regression smoke
 /path/to/your/project/.ai-dev/bin/ai-harness smoke
+
+# 可選：安裝 repo-local pre-commit hook，擋掉沒有 CLOSED/PASS G4 packet 的 staged changes
+bash install.sh --profile strict-harness --hooks --target /path/to/your/project
 
 # 看有哪些可裝
 bash install.sh --list
