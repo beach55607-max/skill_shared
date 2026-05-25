@@ -44,6 +44,7 @@ bash install.sh --profile strict-harness --target /path/to/your/project # option
 - `.ai-dev/runtime/`
 - `.ai-dev/gate-artifacts/`
 - `.ai-dev/bin/ai-harness`
+- `ai-harness run` wrapper
 - G4 packet start/status/close
 - G5 review evidence package
 - command-based reviewer adapter
@@ -55,6 +56,14 @@ G4 packet 欄位缺失、G5 diff 空包、base/head 相同、reviewer 不可用�
 ```bash
 bash install.sh --profile strict-harness --target /path/to/your/project
 /path/to/your/project/.ai-dev/bin/ai-harness smoke
+
+/path/to/your/project/.ai-dev/bin/ai-harness run \
+  --objective "fix login retry bug" \
+  --allowed src/login.ts \
+  --forbidden "auth schema, unrelated UI" \
+  --verify "npm test -- login" \
+  --stop "schema change required" \
+  --command "codex exec 'fix the login retry bug'"
 
 /path/to/your/project/.ai-dev/bin/ai-harness g4-start \
   --objective "fix login retry bug" \
@@ -597,6 +606,15 @@ bash install.sh --profile strict-harness --target /path/to/your/project --dry-ru
 
 # 驗證 strict harness 安裝與 regression smoke
 /path/to/your/project/.ai-dev/bin/ai-harness smoke
+
+# 日常 wrapper：自動建立 G4 packet、執行命令、跑驗證、關閉 packet
+/path/to/your/project/.ai-dev/bin/ai-harness run \
+  --objective "fix login retry bug" \
+  --allowed src/login.ts \
+  --forbidden "auth schema, unrelated UI" \
+  --verify "npm test -- login" \
+  --stop "schema change required" \
+  --command "codex exec 'fix the login retry bug'"
 
 # 可選：安裝 repo-local pre-commit hook，擋掉沒有 CLOSED/PASS G4 packet 的 staged changes
 bash install.sh --profile strict-harness --hooks --target /path/to/your/project

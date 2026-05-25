@@ -14,6 +14,14 @@ Usage:
   ai-harness install-hooks [--force]
   ai-harness hook pre-commit
 
+  ai-harness run \
+    --objective "..." \
+    --allowed path[,path] \
+    --forbidden "..." \
+    --verify "command" \
+    --stop "..." \
+    --command "implementation command"
+
   ai-harness g4-start \
     --objective "..." \
     --allowed path[,path] \
@@ -164,12 +172,16 @@ review_result_dir() {
   echo "$(artifact_dir)/reviews"
 }
 
+run_evidence_dir() {
+  echo "$(runtime_dir)/run-evidence"
+}
+
 state_dir() {
   echo "$(runtime_dir)/state"
 }
 
 ensure_dirs() {
-  mkdir -p "$(runtime_dir)" "$(artifact_dir)" "$(g4_packet_dir)" "$(review_package_dir)" "$(review_result_dir)" "$(state_dir)"
+  mkdir -p "$(runtime_dir)" "$(artifact_dir)" "$(g4_packet_dir)" "$(review_package_dir)" "$(review_result_dir)" "$(run_evidence_dir)" "$(state_dir)"
 }
 
 require_git_repo() {
@@ -597,6 +609,164 @@ cmd_g4_close() {
   echo "$packet_file"
 }
 
+cmd_run() {
+  local objective=""
+  local verify_cmd=""
+  local run_cmd=""
+  local id=""
+  local packet=""
+  local evidence_dir run_log verify_log summary_log
+  local run_exit verify_exit close_status verification_status
+  local -a allowed_files=()
+  local -a forbidden_scope=()
+  local -a stop_conditions=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --objective)
+        require_arg_value "$1" "${2:-}"
+        objective="$2"
+        shift 2
+        ;;
+      --allowed)
+        require_arg_value "$1" "${2:-}"
+        append_csv_values allowed_files "$2"
+        shift 2
+        ;;
+      --forbidden)
+        require_arg_value "$1" "${2:-}"
+        append_csv_values forbidden_scope "$2"
+        shift 2
+        ;;
+      --verify)
+        require_arg_value "$1" "${2:-}"
+        verify_cmd="$2"
+        shift 2
+        ;;
+      --stop)
+        require_arg_value "$1" "${2:-}"
+        append_csv_values stop_conditions "$2"
+        shift 2
+        ;;
+      --command)
+        require_arg_value "$1" "${2:-}"
+        run_cmd="$2"
+        shift 2
+        ;;
+      --id)
+        require_arg_value "$1" "${2:-}"
+        id="$2"
+        shift 2
+        ;;
+      --)
+        shift
+        run_cmd="$*"
+        break
+        ;;
+      *)
+        die "unknown run option: $1"
+        ;;
+    esac
+  done
+
+  [[ -n "$objective" ]] || die "run requires --objective"
+  [[ ${#allowed_files[@]} -gt 0 ]] || die "run requires at least one --allowed entry"
+  [[ ${#forbidden_scope[@]} -gt 0 ]] || die "run requires at least one --forbidden entry"
+  [[ -n "$verify_cmd" ]] || die "run requires --verify"
+  [[ ${#stop_conditions[@]} -gt 0 ]] || die "run requires at least one --stop entry"
+  [[ -n "$run_cmd" ]] || die "run requires --command or -- command"
+
+  require_git_repo
+  ensure_dirs
+
+  if [[ -z "$id" ]]; then
+    id="run-$(timestamp_utc)"
+  fi
+  sanitize_id "$id"
+
+  evidence_dir="$(run_evidence_dir)/$id"
+  [[ ! -e "$evidence_dir" ]] || die "run evidence directory already exists: $evidence_dir"
+  mkdir -p "$evidence_dir"
+  run_log="$evidence_dir/run.log"
+  verify_log="$evidence_dir/verify.log"
+  summary_log="$evidence_dir/summary.log"
+
+  packet="$(
+    cmd_g4_start \
+      --id "$id" \
+      --objective "$objective" \
+      --allowed "$(IFS=,; echo "${allowed_files[*]}")" \
+      --forbidden "$(IFS=,; echo "${forbidden_scope[*]}")" \
+      --verify "$verify_cmd" \
+      --stop "$(IFS=,; echo "${stop_conditions[*]}")"
+  )"
+
+  {
+    echo "run_id: $id"
+    echo "packet: $packet"
+    echo "started_at_utc: $(timestamp_utc)"
+    echo "command: $run_cmd"
+    echo "verification_command: $verify_cmd"
+  } > "$summary_log"
+
+  set +e
+  bash -lc "cd \"$(project_root)\" && $run_cmd" > "$run_log" 2>&1
+  run_exit=$?
+  set -e
+
+  {
+    echo
+    echo "run_exit_code: $run_exit"
+    echo "run_finished_at_utc: $(timestamp_utc)"
+  } >> "$summary_log"
+
+  if [[ "$run_exit" -eq 0 ]]; then
+    set +e
+    bash -lc "cd \"$(project_root)\" && $verify_cmd" > "$verify_log" 2>&1
+    verify_exit=$?
+    set -e
+  else
+    verify_exit=127
+    {
+      echo "verification skipped because implementation command failed"
+      echo "run_exit_code: $run_exit"
+    } > "$verify_log"
+  fi
+
+  {
+    echo "verification_exit_code: $verify_exit"
+    echo "verification_finished_at_utc: $(timestamp_utc)"
+    echo "run_log: $run_log"
+    echo "verify_log: $verify_log"
+  } >> "$summary_log"
+
+  if [[ "$run_exit" -eq 0 && "$verify_exit" -eq 0 ]]; then
+    close_status="DONE"
+    verification_status="PASS"
+  elif [[ "$run_exit" -eq 0 ]]; then
+    close_status="DONE_WITH_CONCERNS"
+    verification_status="FAIL"
+  else
+    close_status="BLOCKED"
+    verification_status="FAIL"
+  fi
+
+  cmd_g4_close \
+    --packet "$packet" \
+    --return-status "$close_status" \
+    --verification-status "$verification_status" \
+    --verification-evidence "$verify_log" >/dev/null
+
+  echo "$summary_log"
+
+  if [[ "$run_exit" -ne 0 ]]; then
+    exit "$run_exit"
+  fi
+  if [[ "$verify_exit" -ne 0 ]]; then
+    exit "$verify_exit"
+  fi
+}
+
 resolve_commit() {
   local root="$1"
   local ref="$2"
@@ -960,6 +1130,35 @@ cmd_smoke() {
   git -C "$root" reset -q HEAD other.txt app.txt
   rm -f "$root/other.txt"
 
+  AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" run \
+    --id smoke-run \
+    --objective "run wrapper smoke" \
+    --allowed app.txt \
+    --forbidden "other files" \
+    --verify "grep -q wrapper app.txt" \
+    --stop "unexpected scope" \
+    --command "echo wrapper >> app.txt" >/dev/null
+  grep -q '^return_status: DONE$' "$root/.ai-dev/runtime/g4-packets/smoke-run.packet.md" || { echo "FAIL run wrapper did not close DONE"; failed=1; }
+  grep -q '^verification_status: PASS$' "$root/.ai-dev/runtime/g4-packets/smoke-run.packet.md" || { echo "FAIL run wrapper did not close PASS"; failed=1; }
+  echo "PASS run wrapper creates and closes G4 packet"
+  git -C "$root" add app.txt
+  AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" hook pre-commit >/dev/null
+  git -C "$root" reset -q HEAD app.txt
+  echo "PASS hook accepts changes produced by run wrapper"
+
+  expect_exit 1 "run wrapper fails closed when verification fails" \
+    env AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" run \
+      --id smoke-run-fail \
+      --objective "run wrapper failure smoke" \
+      --allowed app.txt \
+      --forbidden "other files" \
+      --verify "grep -q missing-token app.txt" \
+      --stop "unexpected scope" \
+      --command "echo noverify >> app.txt" || failed=1
+  grep -q '^return_status: DONE_WITH_CONCERNS$' "$root/.ai-dev/runtime/g4-packets/smoke-run-fail.packet.md" || { echo "FAIL run wrapper failure did not close with concerns"; failed=1; }
+  grep -q '^verification_status: FAIL$' "$root/.ai-dev/runtime/g4-packets/smoke-run-fail.packet.md" || { echo "FAIL run wrapper failure did not record FAIL"; failed=1; }
+  echo "PASS run wrapper records failed verification"
+
   expect_exit 2 "g5-package same base/head fails closed" \
     env AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g5-package --base "$head" --head "$head" || failed=1
 
@@ -1007,6 +1206,9 @@ case "$command_name" in
     ;;
   smoke)
     cmd_smoke "$@"
+    ;;
+  run)
+    cmd_run "$@"
     ;;
   g4-start)
     cmd_g4_start "$@"
