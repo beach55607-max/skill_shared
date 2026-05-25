@@ -39,6 +39,7 @@ Usage:
 
   ai-harness g5-package --base <sha> --head <sha> [--scope path[,path]]
   ai-harness g5-review --package <review-package> [--cmd "reviewer command {package}"]
+  ai-harness full-review --base <sha> --head <sha> [--scope path[,path]] [--cmd "..."]
 
 Environment:
   AI_DEV_PROJECT_ROOT   Project root. Defaults to git top-level or current directory.
@@ -465,7 +466,7 @@ cmd_g4_start() {
   ensure_dirs
 
   if [[ -z "$id" ]]; then
-    id="g4-$(timestamp_utc)"
+    id="g4-$(timestamp_utc)-$$"
   fi
   sanitize_id "$id"
 
@@ -680,7 +681,7 @@ cmd_run() {
   ensure_dirs
 
   if [[ -z "$id" ]]; then
-    id="run-$(timestamp_utc)"
+    id="run-$(timestamp_utc)-$$"
   fi
   sanitize_id "$id"
 
@@ -873,7 +874,7 @@ cmd_g5_package() {
   full_diff_hash="$(git hash-object "$diff_file")"
 
   if [[ -z "$output" ]]; then
-    output="$(review_package_dir)/g5-review-$(timestamp_utc).md"
+    output="$(review_package_dir)/g5-review-$(timestamp_utc)-$$.md"
   fi
   [[ ! -e "$output" ]] || die "review package already exists: $output"
 
@@ -963,7 +964,7 @@ cmd_g5_review() {
   ensure_dirs
   tmp_dir="$(mktemp -d)"
   trap 'rm -rf "$tmp_dir"' RETURN
-  output_file="$(review_result_dir)/g5-review-$(timestamp_utc).md"
+  output_file="$(review_result_dir)/g5-review-$(timestamp_utc)-$$.md"
 
   if [[ "$reviewer_cmd" == *"{package}"* ]]; then
     command_to_run="${reviewer_cmd//\{package\}/\"$package\"}"
@@ -1020,6 +1021,56 @@ cmd_g5_review() {
     BLOCKED) exit 2 ;;
     UNCERTAIN) exit 3 ;;
   esac
+}
+
+cmd_full_review() {
+  local base=""
+  local head="HEAD"
+  local reviewer_cmd="${AI_REVIEWER_CMD:-}"
+  local package=""
+  local -a scope_files=()
+  local -a package_args=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --base)
+        require_arg_value "$1" "${2:-}"
+        base="$2"
+        shift 2
+        ;;
+      --head)
+        require_arg_value "$1" "${2:-}"
+        head="$2"
+        shift 2
+        ;;
+      --scope)
+        require_arg_value "$1" "${2:-}"
+        append_csv_values scope_files "$2"
+        shift 2
+        ;;
+      --cmd)
+        require_arg_value "$1" "${2:-}"
+        reviewer_cmd="$2"
+        shift 2
+        ;;
+      *)
+        die "unknown full-review option: $1"
+        ;;
+    esac
+  done
+
+  [[ -n "$base" ]] || die "full-review requires --base"
+  package_args=(--base "$base" --head "$head")
+  if [[ ${#scope_files[@]} -gt 0 ]]; then
+    package_args+=(--scope "$(IFS=,; echo "${scope_files[*]}")")
+  fi
+
+  package="$(cmd_g5_package "${package_args[@]}")"
+  if [[ -n "$reviewer_cmd" ]]; then
+    cmd_g5_review --package "$package" --cmd "$reviewer_cmd"
+  else
+    cmd_g5_review --package "$package"
+  fi
 }
 
 expect_exit() {
@@ -1183,6 +1234,16 @@ cmd_smoke() {
     --cmd "printf 'PASS\n'" >/dev/null
   echo "PASS g5-review normalizes PASS"
 
+  expect_exit 2 "full-review unavailable reviewer is blocked" \
+    env AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" full-review --base "$base" --head "$head" --scope app.txt || failed=1
+
+  AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" full-review \
+    --base "$base" \
+    --head "$head" \
+    --scope app.txt \
+    --cmd "printf 'PASS\n'" >/dev/null
+  echo "PASS full-review packages diff and normalizes reviewer verdict"
+
   rm -rf "$tmp"
 
   if [[ "$failed" -ne 0 ]]; then
@@ -1224,6 +1285,9 @@ case "$command_name" in
     ;;
   g5-review)
     cmd_g5_review "$@"
+    ;;
+  full-review)
+    cmd_full_review "$@"
     ;;
   install-hooks)
     cmd_install_hooks "$@"
