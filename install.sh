@@ -49,6 +49,39 @@ run_or_print() {
   fi
 }
 
+exclude_strict_harness_runtime() {
+  local exclude_file target_abs
+
+  if ! git -C "$TARGET_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "Note: $TARGET_DIR is not a git repo; skip local .ai-dev exclude."
+    return
+  fi
+
+  target_abs="$(cd "$TARGET_DIR" && pwd)"
+  exclude_file="$(cd "$TARGET_DIR" && git rev-parse --git-path info/exclude)"
+  case "$exclude_file" in
+    /*) ;;
+    ?:*) ;;
+    *) exclude_file="$target_abs/$exclude_file" ;;
+  esac
+
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "  DRY-RUN: ensure .ai-dev/ is listed in $exclude_file"
+    return
+  fi
+
+  mkdir -p "$(dirname "$exclude_file")"
+  touch "$exclude_file"
+  if ! grep -qxF ".ai-dev/" "$exclude_file"; then
+    {
+      echo ""
+      echo "# ai-dev-toolkit strict-harness local runtime"
+      echo ".ai-dev/"
+    } >> "$exclude_file"
+    echo "Added .ai-dev/ to local git exclude: $exclude_file"
+  fi
+}
+
 install_strict_harness() {
   local profile_src="$SCRIPT_DIR/harness/strict-harness"
   local install_root="$TARGET_DIR/.ai-dev"
@@ -92,6 +125,7 @@ install_strict_harness() {
   run_or_print cp -r "$profile_src" "$harness_dir"
   run_or_print cp "$profile_src/bin/ai-harness.sh" "$launcher"
   run_or_print chmod +x "$launcher"
+  exclude_strict_harness_runtime
 
   if [[ "$INSTALL_HOOKS" == true ]]; then
     if [[ "$DRY_RUN" == true ]]; then

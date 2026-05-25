@@ -38,6 +38,7 @@ bash install.sh --profile strict-harness --target /path/to/your/project # option
 ## Strict Harness Profile（可選）
 
 `strict-harness` 是給需要更高強度防線的團隊使用，不是預設輕量 workflow。它會在目標專案建立 `.ai-dev/`，放置 runtime、gate artifacts、launcher 與模板，讓 AI 任務可以逐步沉澱成可檢查的 packet、review evidence、regression smoke。
+Installer 會把 `.ai-dev/` 加到目標 repo 的 local `.git/info/exclude`，避免 runtime artifacts 變成要提交的檔案。
 
 公開 v1 profile 提供單 repo strict workflow：
 

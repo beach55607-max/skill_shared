@@ -23,6 +23,10 @@ This creates:
   harness/strict-harness/
 ```
 
+The installer also adds `.ai-dev/` to the target repo's local
+`.git/info/exclude` when the target is a git repository. It does not modify
+tracked `.gitignore`.
+
 Add `.ai-dev/bin` to `PATH`, or run the launcher by full path:
 
 ```bash
