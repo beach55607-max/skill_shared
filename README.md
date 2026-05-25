@@ -39,19 +39,33 @@ bash install.sh --profile strict-harness --target /path/to/your/project # option
 
 `strict-harness` 是給需要更高強度防線的團隊使用，不是預設輕量 workflow。它會在目標專案建立 `.ai-dev/`，放置 runtime、gate artifacts、launcher 與模板，讓 AI 任務可以逐步沉澱成可檢查的 packet、review evidence、regression smoke。
 
-第一版公開 profile 只提供 foundation：
+公開 v1 profile 提供單 repo strict workflow：
 
 - `.ai-dev/runtime/`
 - `.ai-dev/gate-artifacts/`
 - `.ai-dev/bin/ai-harness`
-- G4 packet / G5 review package templates
+- G4 packet start/status/close
+- G5 review evidence package
+- command-based reviewer adapter
 - `ai-harness smoke`
 
-G4/G5 的完整阻擋邏輯會分階段加入；目前未完成的 strict commands 會明確 `BLOCKED`，不會假裝 gate 已通過。
+G4 packet 欄位缺失、G5 diff 空包、base/head 相同、reviewer 不可用等情境會 fail closed，不會假裝 gate 已通過。
 
 ```bash
 bash install.sh --profile strict-harness --target /path/to/your/project
 /path/to/your/project/.ai-dev/bin/ai-harness smoke
+
+/path/to/your/project/.ai-dev/bin/ai-harness g4-start \
+  --objective "fix login retry bug" \
+  --allowed src/login.ts \
+  --forbidden "auth schema, unrelated UI" \
+  --verify "npm test -- login" \
+  --stop "schema change required"
+
+/path/to/your/project/.ai-dev/bin/ai-harness g5-package \
+  --base main \
+  --head HEAD \
+  --scope src/login.ts
 ```
 
 **v2025.04.04 新增**: 三 AI 角色分離（Maker / Checker / Gate）+ Reviewer Disclosure + Evidence Matrix + 機械強制偵測。
@@ -576,6 +590,9 @@ bash install.sh --profile strict-harness --target /path/to/your/project
 
 # 先看 strict harness 會改哪些檔案
 bash install.sh --profile strict-harness --target /path/to/your/project --dry-run
+
+# 驗證 strict harness 安裝與 regression smoke
+/path/to/your/project/.ai-dev/bin/ai-harness smoke
 
 # 看有哪些可裝
 bash install.sh --list

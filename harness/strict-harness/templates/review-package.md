@@ -4,6 +4,7 @@ Use this template to bind review claims to actual code evidence.
 
 ## Review Binding
 
+- `review_package_hash`:
 - `BASE_SHA`:
 - `HEAD_SHA`:
 - `scope_files`:
@@ -22,6 +23,9 @@ Use this template to bind review claims to actual code evidence.
 The reviewer must not trust the implementer report. Review must inspect the
 actual diff, relevant code, and stated spec. Anything not checked must be marked
 `NOT_CHECKED`, `UNCERTAIN`, or `OUT_OF_SCOPE`.
+
+The embedded diff is the review evidence. If it is truncated or missing files,
+the review package must be treated as `BLOCKED`.
 
 ## Reviewer Verdict
 
