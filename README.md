@@ -8,6 +8,7 @@
 git clone https://github.com/beach55607-max/ai-dev-toolkit && cd ai-dev-toolkit
 bash install.sh --target /path/to/your/project        # Claude Code
 bash install.sh --codex --target /path/to/your/project # Codex
+bash install.sh --profile strict-harness --target /path/to/your/project # optional strict harness
 ```
 
 支援選裝（`--skill 1 3`）、移除（`--uninstall`）、列表（`--list`）。詳見下方 [Quick Start](#quick-start)。
@@ -32,6 +33,25 @@ bash install.sh --codex --target /path/to/your/project # Codex
        ▲                                                                              │
        │                    Regression Gate 回饋迴路                                    │
        └────────────────── 驗證 / Incident 發現 → 沉澱為新 gate ──────────────────────┘
+```
+
+## Strict Harness Profile（可選）
+
+`strict-harness` 是給需要更高強度防線的團隊使用，不是預設輕量 workflow。它會在目標專案建立 `.ai-dev/`，放置 runtime、gate artifacts、launcher 與模板，讓 AI 任務可以逐步沉澱成可檢查的 packet、review evidence、regression smoke。
+
+第一版公開 profile 只提供 foundation：
+
+- `.ai-dev/runtime/`
+- `.ai-dev/gate-artifacts/`
+- `.ai-dev/bin/ai-harness`
+- G4 packet / G5 review package templates
+- `ai-harness smoke`
+
+G4/G5 的完整阻擋邏輯會分階段加入；目前未完成的 strict commands 會明確 `BLOCKED`，不會假裝 gate 已通過。
+
+```bash
+bash install.sh --profile strict-harness --target /path/to/your/project
+/path/to/your/project/.ai-dev/bin/ai-harness smoke
 ```
 
 **v2025.04.04 新增**: 三 AI 角色分離（Maker / Checker / Gate）+ Reviewer Disclosure + Evidence Matrix + 機械強制偵測。
@@ -550,6 +570,12 @@ bash install.sh --codex --target /path/to/your/project
 
 # 只裝你要的
 bash install.sh --skill 1 3 --target /path/to/your/project  # Boundary-First + Adversarial Review
+
+# 安裝 strict harness profile（可選，高強度 evidence workflow）
+bash install.sh --profile strict-harness --target /path/to/your/project
+
+# 先看 strict harness 會改哪些檔案
+bash install.sh --profile strict-harness --target /path/to/your/project --dry-run
 
 # 看有哪些可裝
 bash install.sh --list
