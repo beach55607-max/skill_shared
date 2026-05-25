@@ -1,15 +1,19 @@
 # Strict Harness Smoke Tests
 
-Foundation smoke verifies install shape only:
+Smoke verifies install shape and v1 fail-closed behavior:
 
 ```bash
 .ai-dev/bin/ai-harness smoke
 ```
 
-Future smoke tests should fail closed for:
+Current smoke covers:
 
 - missing G4 packet fields
-- truncated review diff
 - `BASE_SHA` / `HEAD_SHA` mismatch
+- `scope_files` / `actual_diff_files` mismatch
 - reviewer unavailable
-- block scope leaking across unrelated work
+- full diff embedding with `embedded_truncated: false`
+- command-based reviewer `PASS` normalization
+
+Future smoke should add coverage for hook integration and nested-repo custody
+only after those features exist in the public profile.

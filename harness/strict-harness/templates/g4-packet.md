@@ -32,3 +32,5 @@ Allowed statuses:
 - `DONE_WITH_CONCERNS`
 - `NEEDS_CONTEXT`
 - `BLOCKED`
+
+`DONE` requires passing verification evidence when the packet is closed.

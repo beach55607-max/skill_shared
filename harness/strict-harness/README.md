@@ -29,24 +29,77 @@ Add `.ai-dev/bin` to `PATH`, or run the launcher by full path:
 /path/to/project/.ai-dev/bin/ai-harness smoke
 ```
 
-## Foundation Scope
+## v1 Scope
 
-This first public profile only installs the skeleton:
+This public profile provides a single-repo strict workflow:
 
 - project-local runtime and artifact directories
 - `ai-harness smoke`
-- templates for future G4 packets and G5 review packages
-- explicit stubs for G4/G5 commands that are not implemented yet
+- `ai-harness g4-start`
+- `ai-harness g4-status`
+- `ai-harness g4-close`
+- `ai-harness g5-package`
+- `ai-harness g5-review`
+- templates for G4 packets and G5 review packages
 
-The strict behavior will be added in later PRs. Until then, commands such as
-`g4-start` and `g5-package` fail loudly instead of pretending the task passed.
+The harness is intentionally fail-closed: missing packet fields, invalid
+base/head bindings, empty diffs, scope mismatches, and unavailable reviewers
+block instead of passing silently.
+
+## Commands
+
+Create a G4 packet before implementation:
+
+```bash
+.ai-dev/bin/ai-harness g4-start \
+  --objective "fix login retry bug" \
+  --allowed src/login.ts \
+  --forbidden "auth schema, unrelated UI" \
+  --verify "npm test -- login" \
+  --stop "schema change required"
+```
+
+Close the packet after verification:
+
+```bash
+.ai-dev/bin/ai-harness g4-close \
+  --packet g4-20260525T010203Z \
+  --return-status DONE \
+  --verification-status PASS \
+  --verification-evidence verify.log
+```
+
+Create a G5 review evidence package:
+
+```bash
+.ai-dev/bin/ai-harness g5-package \
+  --base main \
+  --head HEAD \
+  --scope src/login.ts
+```
+
+Run a command-based reviewer adapter:
+
+```bash
+AI_REVIEWER_CMD="codex review {package}" \
+  .ai-dev/bin/ai-harness g5-review --package .ai-dev/gate-artifacts/review-packages/g5-review-*.md
+```
+
+Reviewer commands must output one of:
+
+- `PASS`
+- `REJECT`
+- `BLOCKED`
+- `UNCERTAIN`
+
+If no reviewer is configured, `g5-review` returns `BLOCKED`.
 
 ## Non-Goals
 
 This public profile does not depend on any private workspace:
 
 - no company-specific paths
-- no MCP Memory requirement
+- no external memory service requirement
 - no private runtime directory
 - no global block board
 - no nested-repo custody rules in v1
