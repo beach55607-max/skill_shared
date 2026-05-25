@@ -97,6 +97,7 @@ bash install.sh --profile strict-harness --hooks --target /path/to/your/project
 nested repo 時，在 `run` / `g4-start` / `g4-close` / `g5-package` /
 `full-review` / `install-hooks` 加上 `--repo service`。
 
+**v2026.05.25 新增**: Strict Harness public profile + nested repo custody（`--repo` / `AI_DEV_REVIEW_REPO`），可把 `.ai-dev/` runtime 放在 workspace root，同時把 G4/G5/hook 的 git evidence 綁到真正的 child repo。
 **v2025.04.04 新增**: 三 AI 角色分離（Maker / Checker / Gate）+ Reviewer Disclosure + Evidence Matrix + 機械強制偵測。
 **v2025.04.01 新增**: Brainstorming Capture skill（含 Discovery Gate）— 讓 AI 在動手前先把方向想清楚，stakeholder 確認後才進入工程。
 
@@ -620,6 +621,10 @@ bash install.sh --profile strict-harness --target /path/to/your/project
 # 先看 strict harness 會改哪些檔案
 bash install.sh --profile strict-harness --target /path/to/your/project --dry-run
 
+# 如果 runtime 放 workspace root，但 code 在 nested repo
+bash install.sh --profile strict-harness --target /path/to/workspace --repo service
+bash install.sh --profile strict-harness --hooks --target /path/to/workspace --repo service
+
 # 驗證 strict harness 安裝與 regression smoke
 /path/to/your/project/.ai-dev/bin/ai-harness smoke
 
@@ -634,6 +639,16 @@ bash install.sh --profile strict-harness --target /path/to/your/project --dry-ru
 
 # 可選：安裝 repo-local pre-commit hook，擋掉沒有 CLOSED/PASS G4 packet 的 staged changes
 bash install.sh --profile strict-harness --hooks --target /path/to/your/project
+
+# nested repo 時，把 --repo service 加到 run / g4-start / g4-close / g5-package / full-review / install-hooks
+/path/to/workspace/.ai-dev/bin/ai-harness run \
+  --repo service \
+  --objective "fix login retry bug" \
+  --allowed src/login.ts \
+  --forbidden "auth schema, unrelated UI" \
+  --verify "npm test -- login" \
+  --stop "schema change required" \
+  --command "codex exec 'fix the login retry bug'"
 
 # 一鍵產生 G5 package 並送 reviewer command
 AI_REVIEWER_CMD="codex review {package}" \
@@ -806,6 +821,17 @@ If your AI agent also needs **persistent semantic memory** across sessions, chec
 ```text
 ai-dev-toolkit/
 ├── README.md                                            <- You are here
+├── install.sh                                           <- skill/profile installer
+├── harness/
+│   └── strict-harness/                                  <- optional .ai-dev strict workflow profile (NEW v2026.05.25)
+│       ├── README.md
+│       ├── bin/
+│       │   └── ai-harness.sh                            <- G4/G5/run/hook/smoke CLI
+│       ├── smoke/
+│       │   └── README.md                                <- regression smoke coverage
+│       └── templates/
+│           ├── g4-packet.md
+│           └── review-package.md
 ├── cw-brainstorming/                                    <- Brainstorming capture (NEW v2025.04.01)
 │   └── SKILL.md
 ├── usp-brainstorm/                                      <- USP brainstorming (competitive positioning)
@@ -911,6 +937,28 @@ ai-dev-toolkit/
 ---
 
 ## Version History
+
+### v2026.05.25 — Strict Harness public profile + nested repo custody
+
+把內部「防假完成」流程沉澱成公開可安裝 profile，重點是讓同事能在專案本地跑 packet、review evidence、hook、smoke，而不是只讀 workflow 文件。
+
+**新增 Profile:**
+- **Strict Harness Profile** — `bash install.sh --profile strict-harness --target <project>` 安裝 `.ai-dev/` runtime、artifacts、launcher、templates
+- **G4 packet CLI** — `ai-harness g4-start/status/close`，要求 objective、allowed files、forbidden scope、verification command、stop conditions
+- **Run Wrapper** — `ai-harness run` 自動建立 G4 packet、執行 implementation command、跑 verification command、寫 evidence、關閉 packet
+- **G5 Review Package** — `ai-harness g5-package` 產生 BASE/HEAD、scope files、actual diff files、full diff hash、per-file hashes、untruncated scoped diff
+- **Reviewer Adapter** — `ai-harness g5-review` / `full-review` 支援 command-based reviewer，回傳 `PASS` / `REJECT` / `BLOCKED` / `UNCERTAIN`
+- **Optional Pre-Commit Hook** — `install.sh --profile strict-harness --hooks` 擋掉沒有最新 CLOSED/PASS G4 packet 覆蓋的 staged files
+- **Regression Smoke** — `ai-harness smoke` 固定 G4 欄位缺失、G5 base/head mismatch、scope mismatch、reviewer unavailable、full diff embedding、hook scope、run wrapper failure 等 regression
+
+**Nested Repo Custody:**
+- 新增 `--repo <path>` / `AI_DEV_REVIEW_REPO`，讓 `.ai-dev/` runtime 留在 workspace root，但 git SHA、diff、staged files、hook 都綁到真正被審的 child repo
+- Installer 產生 launcher shim，固定安裝時的 `AI_DEV_PROJECT_ROOT`、`AI_DEV_DIR`、`AI_DEV_REVIEW_REPO`，避免從其他 cwd 呼叫時誤判 project root
+- Smoke 覆蓋 nested repo：artifacts 留 workspace runtime、G5 diff 用 child repo、pre-commit hook 檢查 child repo staged files
+
+**限制:**
+- v1 一次只綁一個 review repo；不做多 repo fan-out orchestration
+- public profile 不依賴私有 runtime、外部 memory service、global block board
 
 ### v2025.04.05 — 生成式驗證升級 + I1/I2/I3 rename
 
