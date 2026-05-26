@@ -49,6 +49,7 @@ Installer 會把 `.ai-dev/` 加到目標 repo 的 local `.git/info/exclude`，�
 - `ai-harness run` wrapper
 - G4 packet start/status/close
 - D2/D3 G4 role evidence loop：`implementer` / `spec_reviewer` / `quality_reviewer`
+- D2/D3 G4 role runner：用 command-based provider 自動跑三角色並產生 evidence
 - G5 review evidence package
 - command-based reviewer adapter
 - `full-review` package + reviewer wrapper
@@ -57,6 +58,7 @@ Installer 會把 `.ai-dev/` 加到目標 repo 的 local `.git/info/exclude`，�
 
 G4 packet 欄位缺失、G5 diff 空包、base/head 相同、reviewer 不可用等情境會 fail closed，不會假裝 gate 已通過。
 D2/D3 packet 如果沒有三個 G4 role evidence 全部 `PASS`，也不能 close 成 `DONE` + `PASS`。
+如果設定 `AI_G4_ROLE_CMD` 或 `--role-cmd`，D2/D3 可以自動跑三角色；role command 若不可用、沒有輸出合法狀態、或在 role 階段改動 code，會被標成 `BLOCKED`。
 
 ```bash
 bash install.sh --profile strict-harness --target /path/to/your/project
@@ -109,6 +111,22 @@ bash install.sh --profile strict-harness --hooks --target /path/to/workspace --r
   --status PASS \
   --evidence evidence/quality-reviewer.md
 
+# 或交給 command-based role runner 自動產三角色 evidence
+AI_G4_ROLE_CMD='codex exec -- "$(cat {prompt})"' \
+  /path/to/your/project/.ai-dev/bin/ai-harness g4-role-run \
+    --packet g4-20260525T010203Z
+
+# D2/D3 run wrapper 也可以在 verification PASS 後自動跑三角色再 close
+/path/to/your/project/.ai-dev/bin/ai-harness run \
+  --d-level D2 \
+  --objective "change API contract" \
+  --allowed src/api.ts \
+  --forbidden "auth schema" \
+  --verify "npm test -- api" \
+  --stop "schema change required" \
+  --command "codex exec 'change the API contract'" \
+  --role-cmd 'codex exec -- "$(cat {prompt})"'
+
 /path/to/your/project/.ai-dev/bin/ai-harness g4-close \
   --packet g4-20260525T010203Z \
   --return-status DONE \
@@ -134,6 +152,7 @@ bash install.sh --profile strict-harness --hooks --target /path/to/your/project
 nested repo 時，在 `run` / `g4-start` / `g4-close` / `g5-package` /
 `full-review` / `install-hooks` 加上 `--repo service`。
 
+**v2026.05.26 新增**: `g4-role-run` command-based 三角色 runner；`run --d-level D2/D3 --role-cmd ...` 可在 verification PASS 後自動產生三角色 evidence 並 close，role 階段改動 code 會 fail closed。
 **v2026.05.25 新增**: Strict Harness public profile + nested repo custody（`--repo` / `AI_DEV_REVIEW_REPO`）、D2/D3 G4 role evidence loop，可把 `.ai-dev/` runtime 放在 workspace root，同時把 G4/G5/hook 的 git evidence 綁到真正的 child repo。
 **v2025.04.04 新增**: 三 AI 角色分離（Maker / Checker / Gate）+ Reviewer Disclosure + Evidence Matrix + 機械強制偵測。
 **v2025.04.01 新增**: Brainstorming Capture skill（含 Discovery Gate）— 讓 AI 在動手前先把方向想清楚，stakeholder 確認後才進入工程。
@@ -674,6 +693,17 @@ bash install.sh --profile strict-harness --hooks --target /path/to/workspace --r
   --stop "schema change required" \
   --command "codex exec 'fix the login retry bug'"
 
+# D2/D3：verification PASS 後自動跑三角色 evidence，再關閉 packet
+/path/to/your/project/.ai-dev/bin/ai-harness run \
+  --d-level D2 \
+  --objective "change API contract" \
+  --allowed src/api.ts \
+  --forbidden "auth schema" \
+  --verify "npm test -- api" \
+  --stop "schema change required" \
+  --command "codex exec 'change the API contract'" \
+  --role-cmd 'codex exec -- "$(cat {prompt})"'
+
 # 可選：安裝 repo-local pre-commit hook，擋掉沒有 CLOSED/PASS G4 packet 的 staged changes
 bash install.sh --profile strict-harness --hooks --target /path/to/your/project
 
@@ -975,6 +1005,22 @@ ai-dev-toolkit/
 ---
 
 ## Version History
+
+### v2026.05.26 — Strict Harness G4 role runner
+
+把 D2/D3 三角色從「只能手動留下 evidence」補成「可由 command-based provider 自動產 evidence」。
+
+**新增:**
+- **G4 Role Runner** — `ai-harness g4-role-run --packet <packet>` 依序跑 `implementer`、`spec_reviewer`、`quality_reviewer`，輸出會轉成既有 `g4-role-evidence`
+- **Role Runner Adapter** — 支援 `AI_G4_ROLE_CMD`、`AI_G4_IMPLEMENTER_CMD`、`AI_G4_SPEC_REVIEWER_CMD`、`AI_G4_QUALITY_REVIEWER_CMD`，也可用 `--role-cmd` / per-role command
+- **D2/D3 Auto Close Path** — `ai-harness run --d-level D2|D3 --role-cmd ...` 在 implementation + verification PASS 後，自動跑三角色 evidence，再走既有 `g4-close`
+- **Role Prompt Binding** — role prompt 內嵌 G4 packet、allowed-file committed diff、staged diff、unstaged diff，避免只看 implementer report
+- **Role Mutation Guard** — role command 若在 review 階段改動 tracked diff 或 HEAD，該 role 會變成 `BLOCKED`
+- **Role Runner Smoke** — 固定無 role command 必須 block、三角色 PASS 可 close、role command 偷改 code 必須 block、D2 run 可自動產三角色 evidence 並 close
+
+**邊界:**
+- `g4-role-run` 仍是 internal maker-checker evidence，不取代 G5 external review
+- command-based runner 不綁死 Codex / Claude / Gemini；公開版只要求 provider command 輸出 `STATUS: PASS|REJECTED|NOT_CHECKED|NEEDS_CONTEXT|BLOCKED`
 
 ### v2026.05.25 — Strict Harness public profile + nested repo custody
 

@@ -55,6 +55,7 @@ actual child repo while `.ai-dev/` remains under the target workspace.
 - `ai-harness g4-start`
 - `ai-harness g4-status`
 - `ai-harness g4-role-evidence`
+- `ai-harness g4-role-run`
 - `ai-harness g4-close`
 - `ai-harness g5-package`
 - `ai-harness g5-review`
@@ -126,6 +127,37 @@ closeout. All three role evidence files must be `PASS`:
   --role quality_reviewer \
   --status PASS \
   --evidence evidence/quality-reviewer.md
+```
+
+You can also let a command-based role runner generate all three role evidence
+files:
+
+```bash
+AI_G4_ROLE_CMD='codex exec -- "$(cat {prompt})"' \
+  .ai-dev/bin/ai-harness g4-role-run \
+    --packet g4-20260525T010203Z
+```
+
+The role runner writes a role prompt that includes the packet plus committed,
+staged, and unstaged diffs for the packet's allowed files. It records stdout,
+stderr, exit code, working-tree diff hash, and HEAD before/after the role
+command. If the command is unavailable, does not output a valid `STATUS: ...`,
+or mutates code while acting as a reviewer, the role evidence is recorded as a
+non-PASS state and `g4-close DONE/PASS` stays blocked.
+
+`run` can also auto-run the D2/D3 role loop after implementation and
+verification pass:
+
+```bash
+.ai-dev/bin/ai-harness run \
+  --d-level D2 \
+  --objective "change API contract" \
+  --allowed src/api.ts \
+  --forbidden "auth schema" \
+  --verify "npm test -- api" \
+  --stop "schema change required" \
+  --command "codex exec 'change the API contract'" \
+  --role-cmd 'codex exec -- "$(cat {prompt})"'
 ```
 
 The role loop is internal maker-checker evidence only. It does not replace G5
