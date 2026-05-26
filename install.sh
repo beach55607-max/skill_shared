@@ -5,7 +5,7 @@
 #   bash install.sh --codex            # 安裝到 .codex/skills/
 #   bash install.sh --list             # 列出可安裝的 skill
 #   bash install.sh --skill 1 3        # 只裝 Boundary-First + Adversarial Review
-#   bash install.sh --skill 5          # 只裝 Strict Harness Workflow skill
+#   bash install.sh --skill 5          # 只裝 Strict Harness Workflow skill + /strict-harness
 #   bash install.sh --target /my/proj  # 指定專案目錄
 #   bash install.sh --profile strict-harness --target /my/proj
 #   bash install.sh --profile strict-harness --hooks --target /my/proj [--repo path/to/repo]
@@ -22,6 +22,7 @@ DRY_RUN=false
 INSTALL_HOOKS=false
 FORCE_HOOKS=false
 REVIEW_REPO=""
+INSTALLED_STRICT_HARNESS_WORKFLOW=false
 
 # --- Skill definitions ---
 # Format: "id:source_dir:target_name:description"
@@ -31,7 +32,7 @@ SKILLS=(
   "2:executable-spec-planning:executable-spec-planning:Executable Spec Planning — 可執行規格書"
   "3:adversarial-code-review:adversarial-code-review:Adversarial Code Review — 證偽法審查"
   "4:usp-brainstorm:usp-brainstorm:USP Brainstorm — 產品賣點競爭分析"
-  "5:strict-harness-workflow:strict-harness-workflow:Strict Harness Workflow — 自然語言喚起 ai-harness"
+  "5:strict-harness-workflow:strict-harness-workflow:Strict Harness Workflow — /strict-harness 喚起 ai-harness"
 )
 
 CODEX_SKILLS=(
@@ -50,6 +51,53 @@ run_or_print() {
     printf '\n'
   else
     "$@"
+  fi
+}
+
+install_strict_harness_command() {
+  local command_src="$SCRIPT_DIR/commands/strict-harness.md"
+  local command_dir command_dst
+
+  if [[ ! -f "$command_src" ]]; then
+    echo "  ✗ strict-harness slash command — source not found: commands/strict-harness.md"
+    return
+  fi
+
+  if [[ "$AGENT" == "codex" ]]; then
+    command_dir="$TARGET_DIR/.codex/commands"
+  else
+    command_dir="$TARGET_DIR/.claude/commands"
+  fi
+  command_dst="$command_dir/strict-harness.md"
+
+  run_or_print mkdir -p "$command_dir"
+  run_or_print cp "$command_src" "$command_dst"
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "  - Would install /strict-harness slash command"
+  else
+    echo "  ✓ /strict-harness slash command"
+  fi
+}
+
+uninstall_strict_harness_command() {
+  local command_dir command_dst
+
+  if [[ "$AGENT" == "codex" ]]; then
+    command_dir="$TARGET_DIR/.codex/commands"
+  else
+    command_dir="$TARGET_DIR/.claude/commands"
+  fi
+  command_dst="$command_dir/strict-harness.md"
+
+  if [[ -f "$command_dst" ]]; then
+    run_or_print rm -f "$command_dst"
+    if [[ "$DRY_RUN" == true ]]; then
+      echo "  - Would remove /strict-harness slash command"
+    else
+      echo "  ✓ Removed /strict-harness slash command"
+    fi
+  else
+    echo "  - /strict-harness slash command (not installed)"
   fi
 }
 
@@ -275,7 +323,7 @@ while [[ $# -gt 0 ]]; do
       echo "  bash install.sh                     # Install all to .claude/skills/"
       echo "  bash install.sh --codex             # Install all to .codex/skills/"
       echo "  bash install.sh --skill 1 3         # Install Boundary-First + Adversarial Review"
-      echo "  bash install.sh --skill 5           # Install Strict Harness Workflow"
+      echo "  bash install.sh --skill 5           # Install Strict Harness Workflow + /strict-harness"
       echo "  bash install.sh --target ~/myproj   # Install to specific project"
       echo "  bash install.sh --profile strict-harness --target ~/myproj"
       echo "  bash install.sh --profile strict-harness --hooks --target ~/myproj"
@@ -363,6 +411,9 @@ if [[ "$UNINSTALL" == true ]]; then
     else
       echo "  - $name (not installed)"
     fi
+    if [[ "$name" == "strict-harness-workflow" ]]; then
+      uninstall_strict_harness_command
+    fi
   done
   if [[ "$DRY_RUN" == true ]]; then
     echo "Dry-run complete. No files were changed."
@@ -399,8 +450,15 @@ for entry in "${SKILL_SET[@]}"; do
   else
     echo "  ✓ $name"
   fi
+  if [[ "$name" == "strict-harness-workflow" ]]; then
+    INSTALLED_STRICT_HARNESS_WORKFLOW=true
+  fi
   INSTALLED=$((INSTALLED + 1))
 done
+
+if [[ "$INSTALLED_STRICT_HARNESS_WORKFLOW" == true ]]; then
+  install_strict_harness_command
+fi
 
 echo ""
 if [[ "$DRY_RUN" == true ]]; then
