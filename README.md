@@ -688,7 +688,7 @@ bash install.sh --codex --target /path/to/your/project
 
 # 只裝你要的
 bash install.sh --skill 1 3 --target /path/to/your/project  # Boundary-First + Adversarial Review
-bash install.sh --skill 5 --target /path/to/your/project    # Strict Harness Workflow natural-language trigger
+bash install.sh --skill 5 --target /path/to/your/project    # Strict Harness Workflow + /strict-harness
 
 # 安裝 strict harness profile（可選，高強度 evidence workflow）
 bash install.sh --profile strict-harness --target /path/to/your/project
