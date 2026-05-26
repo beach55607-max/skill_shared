@@ -1,0 +1,7 @@
+interface:
+  display_name: "Strict Harness Workflow"
+  short_description: "Invoke ai-harness for evidence-backed coding tasks"
+  default_prompt: "Use $strict-harness-workflow to run this coding task through the local ai-harness with packet, verification, role evidence, and review package as needed."
+
+policy:
+  allow_implicit_invocation: true
