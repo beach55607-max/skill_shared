@@ -11,13 +11,13 @@ bash install.sh --codex --target /path/to/your/project # Codex
 bash install.sh --profile strict-harness --target /path/to/your/project # optional strict harness
 ```
 
-支援選裝（`--skill 1 3`）、移除（`--uninstall`）、列表（`--list`）。詳見下方 [Quick Start](#quick-start)。
+支援選裝（`--skill 1 3` / `--skill 5`）、移除（`--uninstall`）、列表（`--list`）。詳見下方 [Quick Start](#quick-start)。
 
 ---
 
 核心哲學：**修 bug 不算完成，必須留下下次能擋住同類錯誤的 gate。** 每一次錯誤都應該沉澱成新的防線，讓系統越做越強。
 
-五套 skill 覆蓋 AI 輔助開發的完整生命週期——從發想到交付，每一步都有 stakeholder checkpoint，形成閉環：
+六套 skill 覆蓋 AI 輔助開發的完整生命週期——從發想到交付，每一步都有 stakeholder checkpoint，形成閉環：
 
 ```text
   發想            →     決定            →        規劃          →       施工         →       驗證
@@ -53,12 +53,28 @@ Installer 會把 `.ai-dev/` 加到目標 repo 的 local `.git/info/exclude`，�
 - G5 review evidence package
 - command-based reviewer adapter
 - `full-review` package + reviewer wrapper
+- `strict-harness-workflow` skill：讓 AI 用自然語言任務自動轉成 `ai-harness run`
 - optional repo-local pre-commit hook
 - `ai-harness smoke`
 
 G4 packet 欄位缺失、G5 diff 空包、base/head 相同、reviewer 不可用等情境會 fail closed，不會假裝 gate 已通過。
 D2/D3 packet 如果沒有三個 G4 role evidence 全部 `PASS`，也不能 close 成 `DONE` + `PASS`。
 如果設定 `AI_G4_ROLE_CMD` 或 `--role-cmd`，D2/D3 可以自動跑三角色；role command 若不可用、沒有輸出合法狀態、或在 role 階段改動 code，會被標成 `BLOCKED`。
+
+如果想像 Superpowers 一樣用自然語言呼喚 workflow，安裝第 5 個 skill：
+
+```bash
+bash install.sh --skill 5 --target /path/to/your/project        # Claude Code
+bash install.sh --codex --skill 5 --target /path/to/your/project # Codex
+```
+
+安裝後可以直接要求 agent：
+
+```text
+Use strict-harness workflow to build a Windows exe.
+```
+
+AI 會先檢查 `.ai-dev/bin/ai-harness` 是否存在；D1+ 任務會改用 `ai-harness run` 包住實作，D2/D3 會要求 role evidence。Skill 只是喚起層，真正擋假完成的是 `.ai-dev/bin/ai-harness`。
 
 ```bash
 bash install.sh --profile strict-harness --target /path/to/your/project
@@ -213,6 +229,7 @@ Maker (主 AI)  ──寫 code/spec──→  Checker (獨立 AI)  ──找 bug
 | 審查別人的 PR | Adversarial Review (L2 Code Mode) | 用證據驗證 |
 | 審查設計文件 | Adversarial Review (L2 Spec Mode) | 檢查完整性和一致性 |
 | 部署前驗證 | Adversarial Review (L3 Release Gate) | 完整 execution-layer audit |
+| 想用自然語言要求 AI 走 strict harness | Strict Harness Workflow + strict-harness profile | skill 負責喚起，harness 負責 packet / verification / role evidence |
 
 ---
 
@@ -670,6 +687,7 @@ bash install.sh --codex --target /path/to/your/project
 
 # 只裝你要的
 bash install.sh --skill 1 3 --target /path/to/your/project  # Boundary-First + Adversarial Review
+bash install.sh --skill 5 --target /path/to/your/project    # Strict Harness Workflow natural-language trigger
 
 # 安裝 strict harness profile（可選，高強度 evidence workflow）
 bash install.sh --profile strict-harness --target /path/to/your/project
@@ -683,6 +701,10 @@ bash install.sh --profile strict-harness --hooks --target /path/to/workspace --r
 
 # 驗證 strict harness 安裝與 regression smoke
 /path/to/your/project/.ai-dev/bin/ai-harness smoke
+
+# 讓 AI 用自然語言喚起 strict harness
+bash install.sh --skill 5 --target /path/to/your/project        # Claude Code
+bash install.sh --codex --skill 5 --target /path/to/your/project # Codex
 
 # 日常 wrapper：自動建立 G4 packet、執行命令、跑驗證、關閉 packet
 /path/to/your/project/.ai-dev/bin/ai-harness run \
@@ -742,6 +764,7 @@ bash install.sh --uninstall --target /path/to/your/project
 | 2: Spec Planning | `cp -r executable-spec-planning/ .claude/skills/` | `cp -r executable-spec-planning/ .codex/skills/` |
 | 3: Adversarial Review | `cp -r adversarial-code-review/ .claude/skills/` | `cp -r adversarial-code-review/ .codex/skills/` |
 | 4: USP Brainstorm | `cp -r usp-brainstorm/ .claude/skills/` | `cp -r usp-brainstorm/ .codex/skills/` |
+| 5: Strict Harness Workflow | `cp -r strict-harness-workflow/ .claude/skills/` | `cp -r strict-harness-workflow/ .codex/skills/` |
 
 **ChatGPT / 其他 LLM:** 把對應 `SKILL.md` 的內容貼進對話開頭即可。
 
@@ -904,6 +927,9 @@ ai-dev-toolkit/
 │   └── SKILL.md
 ├── usp-brainstorm/                                      <- USP brainstorming (competitive positioning)
 │   └── SKILL.md
+├── strict-harness-workflow/                             <- Natural-language trigger for .ai-dev/bin/ai-harness
+│   ├── SKILL.md
+│   └── agents/openai.yaml
 ├── claude-code/boundary-first-multi-repo-engineering/   <- Claude Code edition
 │   ├── CLAUDE.md                                        <- For pasting into project CLAUDE.md
 │   ├── SKILL.md                                         <- For uploading as Claude Code skill
@@ -1005,6 +1031,20 @@ ai-dev-toolkit/
 ---
 
 ## Version History
+
+### v2026.05.26 — Strict Harness natural-language trigger skill
+
+補上 Superpowers-style 的喚起層：公開版不只提供 `.ai-dev/bin/ai-harness` 指令，也提供 `strict-harness-workflow` skill，讓 agent 在一般 coding task 中知道要改用 harness。
+
+**新增:**
+- **Strict Harness Workflow Skill** — `strict-harness-workflow/SKILL.md`，用於 D1+ coding / build / packaging / automation 任務，會要求 agent 先檢查 `.ai-dev/bin/ai-harness`
+- **Installer Entry** — `bash install.sh --skill 5` 安裝到 Claude Code；`bash install.sh --codex --skill 5` 安裝到 Codex
+- **Codex Metadata** — `strict-harness-workflow/agents/openai.yaml`，讓 Codex 可用 skill chip / implicit invocation
+- **Natural-Language Invocation** — 使用者可說「Use strict-harness workflow to build an exe」，skill 會引導 agent 產生 `ai-harness run` / `g4-start` / `g4-close` / `full-review`
+
+**邊界:**
+- skill 是喚起層，不是 gate engine；真正的 packet、verification、role evidence、G5 package 仍由 `.ai-dev/bin/ai-harness` 執行
+- 如果 `.ai-dev/bin/ai-harness` 不存在，skill 不得假裝 compliance，必須要求先安裝 `--profile strict-harness`
 
 ### v2026.05.26 — Strict Harness G4 role runner
 

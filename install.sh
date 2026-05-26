@@ -5,6 +5,7 @@
 #   bash install.sh --codex            # 安裝到 .codex/skills/
 #   bash install.sh --list             # 列出可安裝的 skill
 #   bash install.sh --skill 1 3        # 只裝 Boundary-First + Adversarial Review
+#   bash install.sh --skill 5          # 只裝 Strict Harness Workflow skill
 #   bash install.sh --target /my/proj  # 指定專案目錄
 #   bash install.sh --profile strict-harness --target /my/proj
 #   bash install.sh --profile strict-harness --hooks --target /my/proj [--repo path/to/repo]
@@ -30,6 +31,7 @@ SKILLS=(
   "2:executable-spec-planning:executable-spec-planning:Executable Spec Planning — 可執行規格書"
   "3:adversarial-code-review:adversarial-code-review:Adversarial Code Review — 證偽法審查"
   "4:usp-brainstorm:usp-brainstorm:USP Brainstorm — 產品賣點競爭分析"
+  "5:strict-harness-workflow:strict-harness-workflow:Strict Harness Workflow — 自然語言喚起 ai-harness"
 )
 
 CODEX_SKILLS=(
@@ -38,6 +40,7 @@ CODEX_SKILLS=(
   "2:executable-spec-planning:executable-spec-planning:Executable Spec Planning"
   "3:adversarial-code-review:adversarial-code-review:Adversarial Code Review"
   "4:usp-brainstorm:usp-brainstorm:USP Brainstorm"
+  "5:strict-harness-workflow:strict-harness-workflow:Strict Harness Workflow"
 )
 
 run_or_print() {
@@ -272,6 +275,7 @@ while [[ $# -gt 0 ]]; do
       echo "  bash install.sh                     # Install all to .claude/skills/"
       echo "  bash install.sh --codex             # Install all to .codex/skills/"
       echo "  bash install.sh --skill 1 3         # Install Boundary-First + Adversarial Review"
+      echo "  bash install.sh --skill 5           # Install Strict Harness Workflow"
       echo "  bash install.sh --target ~/myproj   # Install to specific project"
       echo "  bash install.sh --profile strict-harness --target ~/myproj"
       echo "  bash install.sh --profile strict-harness --hooks --target ~/myproj"
