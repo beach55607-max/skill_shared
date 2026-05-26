@@ -62,14 +62,22 @@ G4 packet 欄位缺失、G5 diff 空包、base/head 相同、reviewer 不可用�
 D2/D3 packet 如果沒有三個 G4 role evidence 全部 `PASS`，也不能 close 成 `DONE` + `PASS`。
 如果設定 `AI_G4_ROLE_CMD` 或 `--role-cmd`，D2/D3 可以自動跑三角色；role command 若不可用、沒有輸出合法狀態、或在 role 階段改動 code，會被標成 `BLOCKED`。
 
-如果想像 Superpowers 一樣用 `/` 喚醒 workflow，安裝第 5 個 skill。這會同時安裝 `strict-harness-workflow` skill 和 `/strict-harness` slash command：
+如果想像 Superpowers 一樣用 `/` 喚醒 workflow，先裝 strict harness profile，再裝第 5 個 skill：
 
 ```bash
-bash install.sh --skill 5 --target /path/to/your/project        # Claude Code
-bash install.sh --codex --skill 5 --target /path/to/your/project # Codex
+bash install.sh --profile strict-harness --target /path/to/your/project
+bash install.sh --skill 5 --target /path/to/your/project        # Claude Code: installs /strict-harness
+bash install.sh --codex --skill 5 --target /path/to/your/project # Codex: installs skill fallback
 ```
 
-安裝後在 slash menu 執行：
+Client support:
+
+| Client | `/strict-harness` 結論 | 穩定喚醒方式 |
+| --- | --- | --- |
+| Claude Code | 會 | `/strict-harness build a Windows exe` |
+| Codex | 不保證 | `$strict-harness-workflow` |
+
+Claude Code 安裝後在 slash menu 執行：
 
 ```text
 /strict-harness build a Windows exe
@@ -703,12 +711,15 @@ bash install.sh --profile strict-harness --hooks --target /path/to/workspace --r
 # 驗證 strict harness 安裝與 regression smoke
 /path/to/your/project/.ai-dev/bin/ai-harness smoke
 
-# 讓 AI 用 /strict-harness 喚起 strict harness
+# 讓 AI 喚起 strict harness
 bash install.sh --skill 5 --target /path/to/your/project        # Claude Code
 bash install.sh --codex --skill 5 --target /path/to/your/project # Codex
 
-# 安裝後使用：
+# Claude Code 安裝後使用：
 /strict-harness build a Windows exe
+
+# Codex 安裝後使用：
+$strict-harness-workflow build a Windows exe
 
 # 日常 wrapper：自動建立 G4 packet、執行命令、跑驗證、關閉 packet
 /path/to/your/project/.ai-dev/bin/ai-harness run \
@@ -1050,7 +1061,8 @@ ai-dev-toolkit/
 
 **邊界:**
 - `/strict-harness` 是喚起層；真正 gate 邏輯仍在 `.ai-dev/bin/ai-harness`
-- 如果 client 不讀 `.codex/commands/`，Codex 仍可用 `$strict-harness-workflow` skill；Claude Code 會讀 `.claude/commands/strict-harness.md`
+- Claude Code：會讀 `.claude/commands/strict-harness.md`，可用 `/strict-harness <task>`
+- Codex：不保證 client 會讀 `.codex/commands/` 變成 slash menu；穩定方式是用 `$strict-harness-workflow <task>`
 
 ### v2026.05.26 — Strict Harness natural-language trigger skill
 
