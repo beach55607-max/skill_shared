@@ -23,7 +23,8 @@ Usage:
     --forbidden "..." \
     --verify "command" \
     --stop "..." \
-    --command "implementation command"
+    --command "implementation command" \
+    [--role-cmd "role command {prompt}"]
 
   ai-harness g4-start \
     [--repo path/to/repo] \
@@ -36,6 +37,7 @@ Usage:
 
   ai-harness g4-status --packet <packet-id-or-path>
   ai-harness g4-role-evidence --packet <packet> --role implementer|spec_reviewer|quality_reviewer --status PASS --evidence path/to/evidence.md [--notes "..."]
+  ai-harness g4-role-run --packet <packet> [--role all|implementer|spec_reviewer|quality_reviewer] [--cmd "role command {prompt}"]
 
   ai-harness g4-close \
     [--repo path/to/repo] \
@@ -52,6 +54,10 @@ Environment:
   AI_DEV_PROJECT_ROOT   Project root. Defaults to git top-level or current directory.
   AI_DEV_DIR            Runtime root. Defaults to <project>/.ai-dev.
   AI_DEV_REVIEW_REPO    Git repo whose diff/staged files are reviewed. Defaults to project root.
+  AI_G4_ROLE_CMD        Command used by g4-role-run. Placeholders: {prompt}, {packet}, {role}.
+  AI_G4_IMPLEMENTER_CMD Role-specific override for implementer.
+  AI_G4_SPEC_REVIEWER_CMD Role-specific override for spec_reviewer.
+  AI_G4_QUALITY_REVIEWER_CMD Role-specific override for quality_reviewer.
   AI_REVIEWER_CMD       Command used by g5-review. Use {package} as placeholder.
   AI_HARNESS_SKIP       Set to 1 to bypass local hooks with an explicit reason.
 USAGE
@@ -274,6 +280,10 @@ g4_role_evidence_dir() {
   echo "$(runtime_dir)/g4-role-evidence"
 }
 
+g4_role_run_dir() {
+  echo "$(runtime_dir)/g4-role-runs"
+}
+
 review_package_dir() {
   echo "$(artifact_dir)/review-packages"
 }
@@ -291,7 +301,7 @@ state_dir() {
 }
 
 ensure_dirs() {
-  mkdir -p "$(runtime_dir)" "$(artifact_dir)" "$(g4_packet_dir)" "$(g4_role_evidence_dir)" "$(review_package_dir)" "$(review_result_dir)" "$(run_evidence_dir)" "$(state_dir)"
+  mkdir -p "$(runtime_dir)" "$(artifact_dir)" "$(g4_packet_dir)" "$(g4_role_evidence_dir)" "$(g4_role_run_dir)" "$(review_package_dir)" "$(review_result_dir)" "$(run_evidence_dir)" "$(state_dir)"
 }
 
 require_git_repo() {
@@ -435,6 +445,198 @@ assert_g4_role_loop_passed() {
       die "D2/D3 G4 role evidence is not PASS for $role: $status"
     fi
   done < <(required_g4_roles)
+}
+
+worktree_diff_hash() {
+  local root="$1"
+  {
+    git -C "$root" diff --binary --full-index
+    git -C "$root" diff --cached --binary --full-index
+  } | hash_stream
+}
+
+role_runner_config_available() {
+  local default_cmd="${1:-}"
+  local implementer_cmd="${2:-}"
+  local spec_reviewer_cmd="${3:-}"
+  local quality_reviewer_cmd="${4:-}"
+
+  [[ -n "$default_cmd" ||
+     -n "$implementer_cmd" ||
+     -n "$spec_reviewer_cmd" ||
+     -n "$quality_reviewer_cmd" ||
+     -n "${AI_G4_ROLE_CMD:-}" ||
+     -n "${AI_G4_IMPLEMENTER_CMD:-}" ||
+     -n "${AI_G4_SPEC_REVIEWER_CMD:-}" ||
+     -n "${AI_G4_QUALITY_REVIEWER_CMD:-}" ]]
+}
+
+role_command_for() {
+  local role="$1"
+  local default_cmd="$2"
+  local implementer_cmd="$3"
+  local spec_reviewer_cmd="$4"
+  local quality_reviewer_cmd="$5"
+
+  case "$role" in
+    implementer)
+      printf '%s\n' "${implementer_cmd:-$default_cmd}"
+      ;;
+    spec_reviewer)
+      printf '%s\n' "${spec_reviewer_cmd:-$default_cmd}"
+      ;;
+    quality_reviewer)
+      printf '%s\n' "${quality_reviewer_cmd:-$default_cmd}"
+      ;;
+  esac
+}
+
+role_status_exit_code() {
+  case "$1" in
+    PASS) echo 0 ;;
+    REJECTED) echo 1 ;;
+    BLOCKED) echo 2 ;;
+    NOT_CHECKED|NEEDS_CONTEXT) echo 3 ;;
+    *) echo 3 ;;
+  esac
+}
+
+extract_role_status() {
+  local stdout_file="$1"
+  local exit_code="$2"
+  local state_changed="$3"
+  local declared
+
+  if [[ "$state_changed" == "true" || "$exit_code" -ne 0 ]]; then
+    echo "BLOCKED"
+    return
+  fi
+
+  declared="$(
+    awk '
+      BEGIN { IGNORECASE = 1 }
+      /^STATUS[[:space:]]*:/ {
+        value = $0
+        sub(/^STATUS[[:space:]]*:[[:space:]]*/, "", value)
+        gsub(/[[:space:]]+$/, "", value)
+        print toupper(value)
+        exit
+      }
+    ' "$stdout_file"
+  )"
+  case "$declared" in
+    PASS|REJECTED|NOT_CHECKED|NEEDS_CONTEXT|BLOCKED)
+      echo "$declared"
+      return
+      ;;
+  esac
+
+  if grep -Eq '\bREJECTED\b' "$stdout_file"; then
+    echo "REJECTED"
+  elif grep -Eq '\bBLOCKED\b' "$stdout_file"; then
+    echo "BLOCKED"
+  elif grep -Eq '\bNEEDS_CONTEXT\b' "$stdout_file"; then
+    echo "NEEDS_CONTEXT"
+  elif grep -Eq '\bNOT_CHECKED\b' "$stdout_file"; then
+    echo "NOT_CHECKED"
+  elif grep -Eq '\bPASS\b' "$stdout_file"; then
+    echo "PASS"
+  else
+    echo "NEEDS_CONTEXT"
+  fi
+}
+
+render_role_command() {
+  local raw_cmd="$1"
+  local packet_file="$2"
+  local role="$3"
+  local prompt_file="$4"
+  local q_packet q_role q_prompt rendered
+
+  printf -v q_packet '%q' "$packet_file"
+  printf -v q_role '%q' "$role"
+  printf -v q_prompt '%q' "$prompt_file"
+  rendered="$raw_cmd"
+  rendered="${rendered//\{packet\}/$q_packet}"
+  rendered="${rendered//\{role\}/$q_role}"
+  rendered="${rendered//\{prompt\}/$q_prompt}"
+
+  if [[ "$raw_cmd" != *"{packet}"* && "$raw_cmd" != *"{role}"* && "$raw_cmd" != *"{prompt}"* ]]; then
+    rendered="$rendered $q_prompt"
+  fi
+
+  printf '%s\n' "$rendered"
+}
+
+write_role_prompt() {
+  local packet_file="$1"
+  local role="$2"
+  local prompt_file="$3"
+  local root base_sha
+  local -a allowed_files=()
+  local file
+
+  root="$(review_repo_root)"
+  base_sha="$(packet_value "$packet_file" base_sha)"
+  while IFS= read -r file; do
+    allowed_files+=("$file")
+  done < <(list_section_values "$packet_file" "allowed_files:")
+
+  {
+    echo "# G4 Role Runner Prompt"
+    echo
+    echo "role: $role"
+    echo "review_repo: $(review_repo_relpath)"
+    echo "review_repo_root: $root"
+    echo "current_head_sha: $(git_head_sha)"
+    echo
+    echo "You are producing internal G4 maker-checker evidence."
+    echo "Do not edit files. Do not claim external G5 review."
+    echo "Read the packet and actual diff evidence below before deciding."
+    echo "End your response with exactly one status line:"
+    echo
+    echo "STATUS: PASS|REJECTED|NOT_CHECKED|NEEDS_CONTEXT|BLOCKED"
+    echo
+    case "$role" in
+      implementer)
+        echo "Role focus: confirm the implementation matches the packet objective, allowed files, stop conditions, and verification evidence."
+        ;;
+      spec_reviewer)
+        echo "Role focus: check whether the actual change satisfies the stated objective and does not violate forbidden scope or stop conditions."
+        ;;
+      quality_reviewer)
+        echo "Role focus: check tests, regression risk, edge cases, and whether the verification command is adequate for this packet."
+        ;;
+    esac
+    echo
+    echo "## G4 Packet"
+    echo
+    echo '```text'
+    cat "$packet_file"
+    echo '```'
+    echo
+    echo "## Committed Diff: packet base to current HEAD"
+    echo
+    echo '```diff'
+    if git -C "$root" rev-parse --verify "$base_sha^{commit}" >/dev/null 2>&1; then
+      git -C "$root" diff --binary --full-index "$base_sha..HEAD" -- "${allowed_files[@]}" || true
+    else
+      echo "BASE_SHA_NOT_FOUND: $base_sha"
+    fi
+    echo '```'
+    echo
+    echo "## Staged Diff"
+    echo
+    echo '```diff'
+    git -C "$root" diff --cached --binary --full-index -- "${allowed_files[@]}" || true
+    echo '```'
+    echo
+    echo "## Unstaged Diff"
+    echo
+    echo '```diff'
+    git -C "$root" diff --binary --full-index -- "${allowed_files[@]}" || true
+    echo '```'
+  } > "$prompt_file"
 }
 
 path_is_covered_by_allowed() {
@@ -853,6 +1055,181 @@ cmd_g4_role_evidence() {
   echo "$output_file"
 }
 
+cmd_g4_role_run() {
+  local packet=""
+  local repo=""
+  local selected_role="all"
+  local default_cmd="${AI_G4_ROLE_CMD:-}"
+  local implementer_cmd="${AI_G4_IMPLEMENTER_CMD:-}"
+  local spec_reviewer_cmd="${AI_G4_SPEC_REVIEWER_CMD:-}"
+  local quality_reviewer_cmd="${AI_G4_QUALITY_REVIEWER_CMD:-}"
+  local packet_file packet_id d_level root role cmd output_dir prompt_file stdout_file stderr_file evidence_file
+  local command_to_run start_head end_head start_hash end_hash exit_code status state_changed canonical_file status_code overall_code
+  local -a roles=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo)
+        require_arg_value "$1" "${2:-}"
+        repo="$2"
+        set_review_repo_override "$repo"
+        shift 2
+        ;;
+      --packet)
+        require_arg_value "$1" "${2:-}"
+        packet="$2"
+        shift 2
+        ;;
+      --role)
+        require_arg_value "$1" "${2:-}"
+        selected_role="$2"
+        shift 2
+        ;;
+      --cmd)
+        require_arg_value "$1" "${2:-}"
+        default_cmd="$2"
+        shift 2
+        ;;
+      --implementer-cmd)
+        require_arg_value "$1" "${2:-}"
+        implementer_cmd="$2"
+        shift 2
+        ;;
+      --spec-reviewer-cmd)
+        require_arg_value "$1" "${2:-}"
+        spec_reviewer_cmd="$2"
+        shift 2
+        ;;
+      --quality-reviewer-cmd)
+        require_arg_value "$1" "${2:-}"
+        quality_reviewer_cmd="$2"
+        shift 2
+        ;;
+      *)
+        die "unknown g4-role-run option: $1"
+        ;;
+    esac
+  done
+
+  [[ -n "$packet" ]] || die "g4-role-run requires --packet"
+  if [[ "$selected_role" == "all" ]]; then
+    while IFS= read -r role; do
+      roles+=("$role")
+    done < <(required_g4_roles)
+  else
+    is_allowed_role "$selected_role" || die "invalid --role: $selected_role"
+    roles+=("$selected_role")
+  fi
+
+  ensure_dirs
+  packet_file="$(packet_path_from_id "$packet")"
+  validate_packet_file "$packet_file"
+  maybe_set_review_repo_from_packet "$packet_file"
+  require_git_repo
+  grep -q '^status: OPEN$' "$packet_file" || die "g4-role-run requires OPEN G4 packet: $packet_file"
+  d_level="$(packet_d_level "$packet_file")"
+  if ! d_level_requires_role_loop "$d_level"; then
+    die "g4-role-run is only required for D2/D3 packets; packet d_level is $d_level"
+  fi
+
+  packet_id="$(packet_value "$packet_file" packet_id)"
+  sanitize_id "$packet_id"
+  root="$(review_repo_root)"
+  overall_code=0
+
+  for role in "${roles[@]}"; do
+    cmd="$(role_command_for "$role" "$default_cmd" "$implementer_cmd" "$spec_reviewer_cmd" "$quality_reviewer_cmd")"
+    output_dir="$(g4_role_run_dir)/$packet_id/$role-$(timestamp_utc)-$$"
+    mkdir -p "$output_dir"
+    prompt_file="$output_dir/prompt.md"
+    stdout_file="$output_dir/stdout.txt"
+    stderr_file="$output_dir/stderr.txt"
+    evidence_file="$output_dir/evidence.md"
+    write_role_prompt "$packet_file" "$role" "$prompt_file"
+
+    start_head="$(git_head_sha)"
+    start_hash="$(worktree_diff_hash "$root")"
+    exit_code=0
+    command_to_run="NOT_CONFIGURED"
+
+    if [[ -z "$cmd" ]]; then
+      {
+        echo "No role runner command configured for $role."
+        echo "Set AI_G4_ROLE_CMD or a role-specific command."
+      } > "$stdout_file"
+      : > "$stderr_file"
+      exit_code=127
+    else
+      command_to_run="$(render_role_command "$cmd" "$packet_file" "$role" "$prompt_file")"
+      set +e
+      bash -lc "cd \"$root\" && $command_to_run" > "$stdout_file" 2> "$stderr_file"
+      exit_code=$?
+      set -e
+    fi
+
+    end_head="$(git_head_sha)"
+    end_hash="$(worktree_diff_hash "$root")"
+    state_changed="false"
+    if [[ "$start_head" != "$end_head" || "$start_hash" != "$end_hash" ]]; then
+      state_changed="true"
+    fi
+    status="$(extract_role_status "$stdout_file" "$exit_code" "$state_changed")"
+
+    {
+      echo "# G4 Role Runner Evidence"
+      echo
+      echo "role_runner_evidence_version: 1"
+      echo "created_at_utc: $(timestamp_utc)"
+      echo "packet_id: $packet_id"
+      echo "packet_file: $packet_file"
+      echo "role: $role"
+      echo "STATUS: $status"
+      echo "review_repo: $(review_repo_relpath)"
+      echo "review_repo_root: $root"
+      echo "prompt_file: $prompt_file"
+      echo "command: $command_to_run"
+      echo "command_exit_code: $exit_code"
+      echo "state_changed_during_role_run: $state_changed"
+      echo "start_head_sha: $start_head"
+      echo "end_head_sha: $end_head"
+      echo "start_worktree_diff_hash: $start_hash"
+      echo "end_worktree_diff_hash: $end_hash"
+      echo
+      echo "## stdout"
+      echo
+      echo '```text'
+      cat "$stdout_file"
+      echo '```'
+      echo
+      echo "## stderr"
+      echo
+      echo '```text'
+      cat "$stderr_file"
+      echo '```'
+    } > "$evidence_file"
+
+    canonical_file="$(
+      cmd_g4_role_evidence \
+        --packet "$packet_file" \
+        --role "$role" \
+        --status "$status" \
+        --evidence "$evidence_file" \
+        --notes "generated by g4-role-run"
+    )"
+    echo "$canonical_file"
+
+    status_code="$(role_status_exit_code "$status")"
+    if [[ "$status_code" -ne 0 && "$overall_code" -eq 0 ]]; then
+      overall_code="$status_code"
+    fi
+    if [[ "$status_code" -eq 2 ]]; then
+      overall_code=2
+    fi
+  done
+
+  return "$overall_code"
+}
+
 cmd_g4_close() {
   local packet=""
   local repo=""
@@ -952,13 +1329,17 @@ cmd_run() {
   local objective=""
   local verify_cmd=""
   local run_cmd=""
+  local role_cmd="${AI_G4_ROLE_CMD:-}"
+  local implementer_cmd="${AI_G4_IMPLEMENTER_CMD:-}"
+  local spec_reviewer_cmd="${AI_G4_SPEC_REVIEWER_CMD:-}"
+  local quality_reviewer_cmd="${AI_G4_QUALITY_REVIEWER_CMD:-}"
   local id=""
   local packet=""
   local repo=""
   local d_level="D1"
   local review_root
-  local evidence_dir run_log verify_log summary_log
-  local run_exit verify_exit close_status verification_status
+  local evidence_dir run_log verify_log role_run_log summary_log
+  local run_exit verify_exit role_exit close_status verification_status
   local -a allowed_files=()
   local -a forbidden_scope=()
   local -a stop_conditions=()
@@ -1006,6 +1387,26 @@ cmd_run() {
         run_cmd="$2"
         shift 2
         ;;
+      --role-cmd)
+        require_arg_value "$1" "${2:-}"
+        role_cmd="$2"
+        shift 2
+        ;;
+      --implementer-cmd)
+        require_arg_value "$1" "${2:-}"
+        implementer_cmd="$2"
+        shift 2
+        ;;
+      --spec-reviewer-cmd)
+        require_arg_value "$1" "${2:-}"
+        spec_reviewer_cmd="$2"
+        shift 2
+        ;;
+      --quality-reviewer-cmd)
+        require_arg_value "$1" "${2:-}"
+        quality_reviewer_cmd="$2"
+        shift 2
+        ;;
       --id)
         require_arg_value "$1" "${2:-}"
         id="$2"
@@ -1044,6 +1445,7 @@ cmd_run() {
   mkdir -p "$evidence_dir"
   run_log="$evidence_dir/run.log"
   verify_log="$evidence_dir/verify.log"
+  role_run_log="$evidence_dir/role-run.log"
   summary_log="$evidence_dir/summary.log"
 
   packet="$(
@@ -1112,13 +1514,34 @@ cmd_run() {
   fi
 
   if [[ "$close_status" == "DONE" && "$verification_status" == "PASS" ]] && d_level_requires_role_loop "$d_level"; then
-    {
-      echo "role_loop_status: REQUIRED_BEFORE_G4_CLOSE"
-      echo "role_loop_required: true"
-      echo "required_roles: implementer,spec_reviewer,quality_reviewer"
-    } >> "$summary_log"
-    echo "$summary_log"
-    die "D2/D3 run completed verification, but G4 remains OPEN until implementer/spec_reviewer/quality_reviewer role evidence is recorded and g4-close is run"
+    if role_runner_config_available "$role_cmd" "$implementer_cmd" "$spec_reviewer_cmd" "$quality_reviewer_cmd"; then
+      local -a role_run_args=(--packet "$packet")
+      [[ -n "$role_cmd" ]] && role_run_args+=(--cmd "$role_cmd")
+      [[ -n "$implementer_cmd" ]] && role_run_args+=(--implementer-cmd "$implementer_cmd")
+      [[ -n "$spec_reviewer_cmd" ]] && role_run_args+=(--spec-reviewer-cmd "$spec_reviewer_cmd")
+      [[ -n "$quality_reviewer_cmd" ]] && role_run_args+=(--quality-reviewer-cmd "$quality_reviewer_cmd")
+      set +e
+      cmd_g4_role_run "${role_run_args[@]}" > "$role_run_log" 2>&1
+      role_exit=$?
+      set -e
+      {
+        echo "role_loop_required: true"
+        echo "role_run_log: $role_run_log"
+        echo "role_run_exit_code: $role_exit"
+      } >> "$summary_log"
+      if [[ "$role_exit" -ne 0 ]]; then
+        echo "$summary_log"
+        die "D2/D3 role runner did not produce PASS evidence for every required role"
+      fi
+    else
+      {
+        echo "role_loop_status: REQUIRED_BEFORE_G4_CLOSE"
+        echo "role_loop_required: true"
+        echo "required_roles: implementer,spec_reviewer,quality_reviewer"
+      } >> "$summary_log"
+      echo "$summary_log"
+      die "D2/D3 run completed verification, but G4 remains OPEN until implementer/spec_reviewer/quality_reviewer role evidence is recorded and g4-close is run"
+    fi
   fi
 
   cmd_g4_close \
@@ -1528,6 +1951,9 @@ cmd_smoke() {
   home="$(harness_home)"
   failed=0
 
+  unset AI_DEV_REVIEW_REPO
+  REVIEW_REPO_OVERRIDE=""
+
   echo "strict-harness smoke"
   echo "version: $VERSION"
   echo "ai_dev_dir: $dir"
@@ -1699,6 +2125,58 @@ cmd_smoke() {
 
   packet="$(
     AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-start \
+      --id smoke-d2-role-run-unavailable \
+      --d-level D2 \
+      --objective "D2 role runner unavailable smoke task" \
+      --allowed app.txt \
+      --forbidden "anything outside app.txt" \
+      --verify "cat verify.log" \
+      --stop "unexpected scope"
+  )"
+  expect_exit 2 "D2 G4 role runner unavailable blocks" \
+    env AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-role-run --packet "$packet" || failed=1
+
+  packet="$(
+    AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-start \
+      --id smoke-d2-role-run-packet \
+      --d-level D2 \
+      --objective "D2 role runner smoke task" \
+      --allowed app.txt \
+      --forbidden "anything outside app.txt" \
+      --verify "cat verify.log" \
+      --stop "unexpected scope"
+  )"
+  echo "d2 role runner change" >> "$root/app.txt"
+  git -C "$root" add app.txt
+  git -C "$root" commit -q -m "d2 role runner change"
+  AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-role-run \
+    --packet "$packet" \
+    --cmd "test -f {prompt} && printf 'STATUS: PASS\n'" >/dev/null
+  AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-close \
+    --packet "$packet" \
+    --return-status DONE \
+    --verification-status PASS \
+    --verification-evidence "$evidence" >/dev/null
+  echo "PASS D2 G4 role runner records all required role evidence"
+
+  packet="$(
+    AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-start \
+      --id smoke-d2-role-run-mutate \
+      --d-level D2 \
+      --objective "D2 role runner mutation smoke task" \
+      --allowed app.txt \
+      --forbidden "anything outside app.txt" \
+      --verify "cat verify.log" \
+      --stop "unexpected scope"
+  )"
+  expect_exit 2 "D2 G4 role runner blocks commands that mutate code" \
+    env AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-role-run \
+      --packet "$packet" \
+      --cmd "echo role-mutation >> app.txt; printf 'STATUS: PASS\n'" || failed=1
+  git -C "$root" checkout -- app.txt
+
+  packet="$(
+    AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g4-start \
       --id smoke-d2-reject-packet \
       --d-level D2 \
       --objective "D2 role reject smoke task" \
@@ -1780,6 +2258,22 @@ cmd_smoke() {
       --command "echo d2run >> app.txt" || failed=1
   grep -q '^status: OPEN$' "$root/.ai-dev/runtime/g4-packets/smoke-d2-run-open.packet.md" || { echo "FAIL D2 run wrapper did not leave packet OPEN"; failed=1; }
   echo "PASS D2 run wrapper does not fake-close without role evidence"
+  git -C "$root" checkout -- app.txt
+
+  AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" run \
+    --id smoke-d2-run-auto \
+    --d-level D2 \
+    --objective "D2 run wrapper auto role runner smoke" \
+    --allowed app.txt \
+    --forbidden "other files" \
+    --verify "grep -q d2auto app.txt" \
+    --stop "unexpected scope" \
+    --command "echo d2auto >> app.txt" \
+    --role-cmd "test -f {prompt} && printf 'STATUS: PASS\n'" >/dev/null
+  grep -q '^status: CLOSED$' "$root/.ai-dev/runtime/g4-packets/smoke-d2-run-auto.packet.md" || { echo "FAIL D2 run wrapper auto role runner did not close packet"; failed=1; }
+  grep -q '^verification_status: PASS$' "$root/.ai-dev/runtime/g4-packets/smoke-d2-run-auto.packet.md" || { echo "FAIL D2 run wrapper auto role runner did not close PASS"; failed=1; }
+  echo "PASS D2 run wrapper can auto-run role evidence and close"
+  git -C "$root" checkout -- app.txt
 
   expect_exit 2 "g5-package same base/head fails closed" \
     env AI_DEV_PROJECT_ROOT="$root" AI_DEV_DIR="$root/.ai-dev" bash "$self" g5-package --base "$head" --head "$head" || failed=1
@@ -1920,6 +2414,9 @@ case "$command_name" in
     ;;
   g4-role-evidence)
     cmd_g4_role_evidence "$@"
+    ;;
+  g4-role-run)
+    cmd_g4_role_run "$@"
     ;;
   g4-close)
     cmd_g4_close "$@"

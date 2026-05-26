@@ -22,9 +22,13 @@ Current smoke covers:
 - `run` wrapper records failed verification as non-PASS
 - D2/D3 G4 packets cannot close `DONE` + `PASS` without all three role evidence files
 - D2/D3 G4 packets reject any role evidence status other than `PASS`
+- D2/D3 `g4-role-run` blocks when no role command is configured
+- D2/D3 `g4-role-run` can generate all required role evidence files
+- D2/D3 `g4-role-run` blocks role commands that mutate code while reviewing
 - D2/D3 G4 role evidence records and re-checks the source evidence hash
 - D2/D3 G4 role evidence must be captured at the same HEAD that G4 closes
 - D2 `run` wrapper leaves the packet open instead of fake-closing before role evidence
+- D2 `run` wrapper can auto-run role evidence and close when `--role-cmd` is configured
 - G5 packages can bind a closed G4 packet and expose its D-level / role-loop state
 - nested repo custody keeps `.ai-dev/` artifacts under the workspace root
 - nested repo custody binds G5 diffs to the child git repo through `--repo`
